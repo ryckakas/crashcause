@@ -1,0 +1,71 @@
+# golangci-lint v2 configuration.
+#
+# Policy: no `//nolint` directive without a reason comment
+# (e.g. `//nolint:errcheck // response body close is best-effort here`).
+# A bare `//nolint` is not acceptable in review.
+#
+# Schema reference: https://golangci-lint.run/docs/configuration/file/
+version: "2"
+
+linters:
+  # Start from nothing and enable exactly the linters we want, rather than
+  # inheriting golangci-lint's "standard" default set — this keeps the
+  # enabled set an explicit, reviewable list.
+  default: none
+
+  enable:
+    - errcheck
+    - govet
+    - staticcheck # note: gosimple was merged into staticcheck; do not list it separately
+    - revive
+    - gosec
+    - errorlint
+    - contextcheck
+    - bodyclose
+    - noctx
+    - exhaustive
+    - gocritic
+    - misspell
+    - unparam
+    - copyloopvar
+
+  settings:
+    # exhaustive guards internal/engine's CauseCode taxonomy: any switch over
+    # engine.CauseCode must handle every cause explicitly.
+    exhaustive:
+      check:
+        - switch
+      # A `default:` case must NOT be treated as covering missing cause
+      # codes — we want new CauseCode values to force every switch to be
+      # updated, not silently fall through to default.
+      default-signifies-exhaustive: false
+      # Also check switches in generated files, in case any are added later.
+      check-generated: true
+      # Require every enum member to appear in every switch over CauseCode,
+      # not just switches opted in via a comment.
+      explicit-exhaustive-switch: false
+      explicit-exhaustive-map: false
+
+    misspell:
+      locale: US
+
+  exclusions:
+    rules:
+      # Test files: relax noise-prone checks that don't pay for themselves
+      # in test code (unchecked errors on cleanup, permissive test fixtures,
+      # unused parameters in table-driven test helpers).
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ryckakas/crashcause

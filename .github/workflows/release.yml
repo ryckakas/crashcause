@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # create the GitHub release and upload assets
+  packages: write  # push images/manifests to ghcr.io
+  id-token: write  # available for SBOM/attestation signing
+
+jobs:
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0  # goreleaser needs full history/tags for the changelog
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: docker/setup-qemu-action@v4.2.0
+
+      - uses: docker/setup-buildx-action@v4.2.0
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # .goreleaser.yaml enables `sboms`, which shells out to syft. Install
+      # it explicitly so the release doesn't fail looking for it on PATH.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0.24.0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7.2.3
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

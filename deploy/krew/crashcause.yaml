@@ -1,0 +1,81 @@
+# krew plugin manifest for crashcause.
+#
+# STATUS: this plugin is NOT yet published to the krew index
+# (https://github.com/kubernetes-sigs/krew-index). It is hand-maintained
+# here for local testing (`kubectl krew install --manifest=...`) and as the
+# basis for a future krew-index submission.
+#
+# `version` and every `sha256` below are release-time placeholders. They get
+# rewritten once the first real GitHub release exists and its
+# crashcause_<version>_checksums.txt is available (see the "krew:" note in
+# ../../.goreleaser.yaml - automation for this is tracked for milestone 9).
+#
+# The `uri` values below must stay in sync with the archive `name_template`
+# in ../../.goreleaser.yaml: "crashcause_{{ .Version }}_{{ .Os }}_{{ .Arch }}".
+apiVersion: krew.googlecontainertools.github.com/v1alpha2
+kind: Plugin
+metadata:
+  name: crashcause
+spec:
+  version: v0.0.0 # placeholder - templated to the real tag at release time
+  homepage: https://github.com/ryckakas/crashcause
+  shortDescription: Explain why a pod crashed
+  description: |
+    crashcause pulls a pod's status, recent events, previous-container logs,
+    and node conditions from the cluster API and classifies why it crashed
+    into a stable cause code (for example: OOMKilled, failing readiness
+    probe, missing secret/configmap, bad image reference, unschedulable, or
+    a stuck init container).
+
+    STATUS: under active development. `crashcause inspect` and
+    `crashcause watch` are scaffolded but not yet implemented as of this
+    manifest - the CLI shape exists, but crash classification does not run
+    end-to-end yet.
+  caveats: |
+    This is a pre-release build. `inspect` and `watch` currently exit with
+    "not yet implemented". Track progress at
+    https://github.com/ryckakas/crashcause.
+  platforms:
+    - selector:
+        matchLabels:
+          os: darwin
+          arch: amd64
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      bin: crashcause
+      files:
+        - from: crashcause
+          to: .
+
+    - selector:
+        matchLabels:
+          os: darwin
+          arch: arm64
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_arm64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      bin: crashcause
+      files:
+        - from: crashcause
+          to: .
+
+    - selector:
+        matchLabels:
+          os: linux
+          arch: amd64
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      bin: crashcause
+      files:
+        - from: crashcause
+          to: .
+
+    - selector:
+        matchLabels:
+          os: linux
+          arch: arm64
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_arm64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      bin: crashcause
+      files:
+        - from: crashcause
+          to: .

@@ -1,0 +1,21 @@
+# kind cluster config for the crashcause demo.
+#
+# IMPORTANT: this is a *kind* config (consumed by `kind create cluster
+# --config ...`), not a Kubernetes API resource. It must never be passed to
+# `kubectl apply`. `kubectl apply -f examples/kind-demo/` would try to parse
+# this file as a Kubernetes object and fail (or, worse, if a CRD ever matched
+# this GVK, do something unintended) — always target the workload manifests
+# explicitly, never the whole directory.
+#
+# Single control-plane node only, no worker node: kind's default single-node
+# cluster does not taint the control-plane node, so pods schedule on it
+# normally. None of these demo scenarios (OOM, bad probe, missing secret,
+# bad image, unschedulable, stuck init) depend on multi-node behavior (no
+# node-affinity/anti-affinity, no per-node resource comparisons other than
+# "no node has 1000 CPUs", which holds just as well with one node). A second
+# node would only add startup time and teardown cost for this demo.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: crashcause-demo
+nodes:
+  - role: control-plane

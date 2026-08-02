@@ -1,0 +1,29 @@
+# Expected cause code: oom_killed
+#
+# Mechanism: the container is given a 16Mi memory limit and immediately
+# tries to allocate and touch 128M of anonymous memory via `stress`. The
+# kernel cgroup OOM killer kills the process for exceeding its cgroup memory
+# limit; kubelet reports this back as
+# `lastState.terminated.reason=OOMKilled` (exit code 137) on the container
+# status. restartPolicy: Always means kubelet restarts it, it OOMs again,
+# and restartCount climbs (visible as CrashLoopBackOff between kills).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-demo
+  namespace: crashcause-demo
+  labels:
+    app.kubernetes.io/part-of: crashcause-demo
+    crashcause.dev/scenario: oom-killed
+spec:
+  restartPolicy: Always
+  containers:
+    - name: stress
+      image: polinux/stress
+      command: ["stress"]
+      args: ["--vm", "1", "--vm-bytes", "128M", "--vm-hang", "0"]
+      resources:
+        requests:
+          memory: "16Mi"
+        limits:
+          memory: "16Mi"

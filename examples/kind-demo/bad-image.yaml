@@ -1,0 +1,47 @@
+# Expected cause code: image_pull_not_found
+# (crashcause's taxonomy also has image_pull_other for other pull failures,
+# e.g. transient registry errors, but a "manifest unknown"/"not found" tag
+# error like this one should classify as image_pull_not_found specifically.)
+#
+# Mechanism: the image reference points at a real, reachable registry
+# (Docker Hub) and a real repository (busybox), but a tag that does not
+# exist. This produces `ErrImagePull` followed by `ImagePullBackOff` in
+# `waiting.reason`, with an event message containing "not found" / "manifest
+# unknown" — distinct from a bogus registry host, which would instead
+# produce a DNS/timeout error mapping to a different cause. imagePullPolicy
+# is set to Always so a locally cached image can never mask the failure.
+#
+# This one is deliberately a Deployment (every other scenario here is a bare
+# Pod) so the demo also exercises crashcause's owner-metadata resolution
+# path: the pod crashcause inspects is owned by a ReplicaSet, which is in
+# turn owned by this Deployment, and `inspect` is expected to report
+# Owner.Kind=ReplicaSet / walk up to the Deployment name. Bad-image-pull is
+# also the most realistic scenario to see running under a Deployment in
+# practice (a bad rollout), which is why this one was picked over the
+# others for the conversion.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-image-demo
+  namespace: crashcause-demo
+  labels:
+    app.kubernetes.io/part-of: crashcause-demo
+    crashcause.dev/scenario: image-pull-not-found
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: crashcause-demo
+      crashcause.dev/scenario: image-pull-not-found
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: crashcause-demo
+        crashcause.dev/scenario: image-pull-not-found
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: app
+          image: busybox:this-tag-does-not-exist-crashcause-demo
+          imagePullPolicy: Always
+          command: ["sh", "-c", "sleep 3600"]

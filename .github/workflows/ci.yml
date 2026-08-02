@@ -1,0 +1,254 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --- lint: required, genuinely gating -------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # golangci-lint-action v9 supports golangci-lint v2 (v7+ of the action
+      # dropped v1 support entirely). Our .golangci.yml uses the v2 config
+      # schema ("version: \"2\""), so the pinned golangci-lint version below
+      # MUST be a v2.x release.
+      - uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.12.2
+
+  # --- test: required, genuinely gating -------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race + coverage)
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      # There are no *_test.go files yet (milestone 1 scaffold), so `go test`
+      # passes trivially with "no test files" and coverage.out may be empty
+      # or missing. This step is informational only and must never fail the
+      # job on that account - it just surfaces whatever coverage exists.
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -s coverage.out ]; then
+            go tool cover -func=coverage.out || echo "note: coverage.out had no usable data yet"
+          else
+            echo "note: coverage.out is empty or missing - no tests exist yet at this milestone"
+          fi
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.out
+          if-no-files-found: warn
+
+  # --- build: required, genuinely gating (cross-compile only, no execution) -
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: arm64
+    env:
+      CGO_ENABLED: 0
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Cross-compile only - we cannot run darwin/arm64 binaries on a linux
+      # runner, so this just proves the target compiles cleanly.
+      - name: Cross-compile cmd/crashcause
+        run: |
+          mkdir -p /tmp/crashcause-build
+          go build -o "/tmp/crashcause-build/crashcause-${GOOS}-${GOARCH}" ./cmd/crashcause
+
+  # --- govulncheck: required, genuinely gating ------------------------------
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: golang/govulncheck-action@v1.1.0
+        with:
+          go-version-file: go.mod
+
+  # --- helm: required, but self-skips cleanly while charts/crashcause/ does
+  #     not exist yet (milestone 9). Once the chart exists, this becomes a
+  #     real gate on `helm lint` plus the pods/log RBAC toggle contract.
+  helm:
+    name: Helm chart checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: azure/setup-helm@v5.0.1
+        with:
+          version: v4.2.3
+
+      - name: helm lint / template guardrails
+        run: |
+          set -euo pipefail
+
+          if [ ! -d charts/crashcause ]; then
+            echo "charts/crashcause not present yet (milestone 9) - skipping helm checks"
+            exit 0
+          fi
+
+          helm lint charts/crashcause
+
+          echo "Rendering with default values (log collection enabled)..."
+          helm template charts/crashcause > /tmp/rendered-default.yaml
+          if ! grep -q "pods/log" /tmp/rendered-default.yaml; then
+            echo "FAIL: expected the 'pods/log' RBAC verb in the default render, but it was not found"
+            exit 1
+          fi
+          echo "OK: pods/log is present by default"
+
+          echo "Rendering with logCollection.enabled=false..."
+          helm template charts/crashcause --set logCollection.enabled=false > /tmp/rendered-nolog.yaml
+          if grep -q "pods/log" /tmp/rendered-nolog.yaml; then
+            echo "FAIL: 'pods/log' RBAC verb should be removed when logCollection.enabled=false, but it was found"
+            exit 1
+          fi
+          echo "OK: pods/log is absent when logCollection.enabled=false"
+
+  # --- e2e-kind: best effort only, never blocks the pipeline ----------------
+  # `inspect` and `watch` currently return "not yet implemented", so this job
+  # cannot assert cause codes yet. It exercises the plumbing (cluster, demo
+  # manifests, CLI invocation) and logs output for visibility. Cause-code
+  # assertions get enabled in milestone 3, once `inspect` works end-to-end.
+  e2e-kind:
+    name: E2E (kind, best effort)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build crashcause binary
+        run: |
+          mkdir -p bin
+          go build -o bin/crashcause ./cmd/crashcause
+
+      - name: Create kind cluster (using examples/kind-demo/kind-config.yaml)
+        if: hashFiles('examples/kind-demo/kind-config.yaml') != ''
+        uses: helm/kind-action@v1.14.0
+        with:
+          config: examples/kind-demo/kind-config.yaml
+
+      - name: Create kind cluster (default config fallback)
+        if: hashFiles('examples/kind-demo/kind-config.yaml') == ''
+        uses: helm/kind-action@v1.14.0
+
+      - name: Apply demo workload manifests
+        run: |
+          if [ ! -d examples/kind-demo ]; then
+            echo "examples/kind-demo not present - skipping apply"
+            exit 0
+          fi
+
+          # kind-config.yaml is a kind Cluster config, not a k8s resource -
+          # `kubectl apply -f examples/kind-demo/` on the whole directory
+          # would fail on it, so apply only the workload manifests.
+          shopt -s nullglob
+          files=()
+          for f in examples/kind-demo/*.yaml; do
+            base="$(basename "$f")"
+            if [ "$base" = "kind-config.yaml" ]; then
+              continue
+            fi
+            files+=("$f")
+          done
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No workload manifests found in examples/kind-demo/ yet - skipping apply"
+            exit 0
+          fi
+
+          kubectl apply -f "${files[@]}"
+
+      - name: Wait for pods to settle into their failure states
+        run: sleep 45
+
+      - name: Dump cluster state (debug)
+        if: always()
+        run: |
+          echo "== kubectl get pods -A =="
+          kubectl get pods -A || true
+          echo "== kubectl describe pods -A =="
+          kubectl describe pods -A || true
+
+      - name: Run crashcause inspect against demo pods (best effort)
+        run: |
+          echo "NOTE: 'inspect' currently returns 'not yet implemented' at this milestone."
+          echo "Cause-code assertions are intentionally NOT made here - they land in"
+          echo "milestone 3, once 'inspect' works end-to-end."
+
+          pods="$(kubectl get pods -A --no-headers -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name 2>/dev/null || true)"
+          if [ -z "$pods" ]; then
+            echo "No pods found to inspect - skipping"
+            exit 0
+          fi
+
+          echo "$pods" | while read -r ns name; do
+            [ -z "$name" ] && continue
+            echo "---- inspecting ${ns}/${name} ----"
+            ./bin/crashcause inspect "$name" -n "$ns" || echo "(expected at this milestone) inspect exited non-zero"
+          done
+
+      - name: Delete kind cluster
+        if: always()
+        run: kind delete cluster || true

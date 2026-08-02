@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: crashcause
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: crashcause
+    main: ./cmd/crashcause
+    binary: crashcause
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}
+
+archives:
+  - id: crashcause
+    ids: [crashcause]
+    formats: [tar.gz]
+    # NOTE: krew manifest URIs in deploy/krew/crashcause.yaml are hand-built
+    # to match this exact template - keep them in sync if this changes.
+    name_template: "crashcause_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "crashcause_{{ .Version }}_checksums.txt"
+
+sboms:
+  - id: default
+    artifacts: archive
+
+changelog:
+  use: git
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+dockers:
+  - id: crashcause-linux-amd64
+    ids: [crashcause]
+    goos: linux
+    goarch: amd64
+    use: buildx
+    dockerfile: Dockerfile
+    image_templates:
+      - "ghcr.io/ryckakas/crashcause:{{ .Version }}-amd64"
+      - "ghcr.io/ryckakas/crashcause:latest-amd64"
+    # All OCI labels are set here rather than in the Dockerfile, so there is
+    # exactly one place that owns them and no risk of stale/duplicate values.
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/ryckakas/crashcause"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+  - id: crashcause-linux-arm64
+    ids: [crashcause]
+    goos: linux
+    goarch: arm64
+    use: buildx
+    dockerfile: Dockerfile
+    image_templates:
+      - "ghcr.io/ryckakas/crashcause:{{ .Version }}-arm64"
+      - "ghcr.io/ryckakas/crashcause:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/ryckakas/crashcause"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+docker_manifests:
+  - name_template: "ghcr.io/ryckakas/crashcause:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/ryckakas/crashcause:{{ .Version }}-amd64"
+      - "ghcr.io/ryckakas/crashcause:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/ryckakas/crashcause:latest"
+    image_templates:
+      - "ghcr.io/ryckakas/crashcause:latest-amd64"
+      - "ghcr.io/ryckakas/crashcause:latest-arm64"
+
+release:
+  draft: false
+  prerelease: auto
+
+# krew:
+# We deliberately do NOT use goreleaser's `krews:` integration - its
+# availability/stability varies across goreleaser versions and we'd rather
+# keep this pipeline simple and honest. Instead, the krew plugin manifest is
+# hand-maintained at deploy/krew/crashcause.yaml. Its `version` and `sha256`
+# fields are release-time placeholders today; wiring up automation to
+# rewrite them from this release's checksums.txt is tracked for milestone 9,
+# alongside the Helm chart work.

@@ -1,0 +1,35 @@
+# Expected cause code: init_container_stuck
+#
+# Mechanism: the (only) init container just sleeps for a long time and
+# never exits 0, so the pod stays in phase Pending with status
+# `Init:0/1` indefinitely — it is not crashing or restarting, it is simply
+# stuck, which is what distinguishes this from init_container_failure. The
+# main container is trivial (`sleep 3600`) and would run fine if the init
+# container ever completed, so the only interesting thing about this pod is
+# the stuck init container.
+#
+# Timing note: crashcause's `--init-stuck-threshold` defaults to 10m (see
+# internal/cli/inspect.go), so a real diagnosis requires the pod to have
+# been in Init: state for that long before `inspect` will confidently call
+# it "stuck" rather than "still legitimately initializing". For a fast demo
+# (once inspect is implemented, milestone 3+), pass a lower threshold, e.g.
+# `--init-stuck-threshold 30s`, to see the diagnosis immediately instead of
+# waiting 10 minutes.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stuck-init-demo
+  namespace: crashcause-demo
+  labels:
+    app.kubernetes.io/part-of: crashcause-demo
+    crashcause.dev/scenario: init-container-stuck
+spec:
+  restartPolicy: Never
+  initContainers:
+    - name: init-wait
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 3600"]
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 3600"]

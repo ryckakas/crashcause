@@ -1,0 +1,40 @@
+# Compiled binaries
+/crashcause
+/crashcause.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output
+/bin/
+dist/
+
+# Go test / coverage artifacts
+*.test
+*.out
+coverage.out
+coverage.txt
+coverage.html
+cover.out
+/coverage/
+
+# Go workspace files (not committed; each dev opts in locally if needed)
+go.work
+go.work.sum
+
+# vendor/ is not committed for this module; uncomment if that changes
+# vendor/
+
+# Editor / IDE noise
+.idea/
+.vscode/
+*.swp
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Local environment / secrets
+.env
+*.local

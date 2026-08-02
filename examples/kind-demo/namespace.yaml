@@ -1,0 +1,9 @@
+# Dedicated namespace for all crashcause kind-demo workloads.
+# Apply this first so `metadata.namespace` references in the other manifests
+# resolve; cleanup is then a single `kubectl delete ns crashcause-demo`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crashcause-demo
+  labels:
+    app.kubernetes.io/part-of: crashcause-demo
