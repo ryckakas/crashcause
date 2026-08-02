@@ -1,0 +1,25 @@
+# Weekly dependency updates, per the project spec (§8a): one tool, weekly
+# cadence, covering both the Go module graph and the pinned GitHub Actions.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      # k8s.io modules must move in lockstep (client-go/api/apimachinery/
+      # cli-runtime share a version train); one grouped PR keeps them
+      # mutually compatible instead of four conflicting ones.
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
