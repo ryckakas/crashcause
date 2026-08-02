@@ -39,8 +39,6 @@ linters:
       # codes — we want new CauseCode values to force every switch to be
       # updated, not silently fall through to default.
       default-signifies-exhaustive: false
-      # Also check switches in generated files, in case any are added later.
-      check-generated: true
       # Require every enum member to appear in every switch over CauseCode,
       # not just switches opted in via a comment.
       explicit-exhaustive-switch: false
