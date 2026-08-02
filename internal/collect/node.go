@@ -28,13 +28,15 @@ func (c *Collector) nodeConditions(ctx context.Context, nodeName string) engine.
 		if cond.Status != corev1.ConditionTrue {
 			continue
 		}
-		switch {
-		case cond.Type == corev1.NodeMemoryPressure:
+		switch cond.Type {
+		case corev1.NodeMemoryPressure:
 			out.MemoryPressure = true
-		case cond.Type == corev1.NodeDiskPressure:
+		case corev1.NodeDiskPressure:
 			out.DiskPressure = true
-		case cond.Type == corev1.NodePIDPressure:
+		case corev1.NodePIDPressure:
 			out.PIDPressure = true
+		case corev1.NodeReady, corev1.NodeNetworkUnavailable:
+			// Not a pressure condition; nothing to record.
 		}
 	}
 	return out

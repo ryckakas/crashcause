@@ -20,7 +20,7 @@ var waitingReasonsWarrantingDiagnosis = map[string]bool{
 	"CreateContainerConfigError": true,
 }
 
-// podFingerprint summarises everything about a pod that can make it newly
+// podFingerprint summarizes everything about a pod that can make it newly
 // interesting: per-container restart counts and state kinds, plus the pod
 // phase/reason and whether it is terminating.
 //

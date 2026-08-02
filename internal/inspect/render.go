@@ -34,8 +34,8 @@ func newDiagnosis(d engine.Diagnosis) Diagnosis {
 	return Diagnosis{Diagnosis: d, AISummary: d.AISummary}
 }
 
-// Indentation used by the human renderer. Deliberately plain: no ANSI colour,
-// no box drawing, no external colour library — the report is meant to survive
+// Indentation used by the human renderer. Deliberately plain: no ANSI color,
+// no box drawing, no external color library — the report is meant to survive
 // being piped into a ticket, a chat message or a CI log unchanged, and NO_COLOR
 // handling you never need is one less thing to get wrong.
 const (

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -85,7 +86,7 @@ func readRedactPatterns(path string) ([]string, error) {
 	if path == "" {
 		return nil, nil
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("reading --ai-redact-extra file: %w", err)
 	}

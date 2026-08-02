@@ -188,7 +188,6 @@ func TestLokiNewValidatesURL(t *testing.T) {
 		{"no host", "http://"},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if _, err := NewLoki(LokiConfig{URL: tc.url}); err == nil {

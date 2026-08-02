@@ -25,7 +25,7 @@ type stdoutSink struct {
 }
 
 // NewStdout returns a Sink that emits each Diagnosis as a single line of JSON
-// to w. It is safe for concurrent use: Emit serialises writes with a mutex, so
+// to w. It is safe for concurrent use: Emit serializes writes with a mutex, so
 // lines from concurrent goroutines are never interleaved. Close is a no-op —
 // the sink does not own w and must not close the process's stdout.
 func NewStdout(w io.Writer) Sink {

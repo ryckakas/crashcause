@@ -157,7 +157,7 @@ func (o Options) validate() error {
 // the single place where inspect-mode failures are rendered, so the CLI layer
 // can stay silent about anything Run already reported.
 func (o Options) fail(err error) int {
-	fmt.Fprintln(o.ErrOut, "error:", err)
+	_, _ = fmt.Fprintln(o.ErrOut, "error:", err)
 	return ExitError
 }
 
@@ -187,7 +187,7 @@ func (o Options) collectInputs(ctx context.Context, client kubernetes.Interface)
 }
 
 // describeCollectError turns a collector error into a short, actionable line.
-// The wrapped API error is preserved for anything we do not recognise.
+// The wrapped API error is preserved for anything we do not recognize.
 func (o Options) describeCollectError(err error) error {
 	switch {
 	case errors.Is(err, collect.ErrContainerNotFound):
@@ -231,9 +231,9 @@ func (o Options) reportNothingToDiagnose(inputs []engine.Inputs) int {
 		}
 	}
 
-	fmt.Fprintln(w, msg)
+	_, _ = fmt.Fprintln(w, msg)
 	if o.Verbose {
-		fmt.Fprintln(w, checkedSummary(inputs))
+		_, _ = fmt.Fprintln(w, checkedSummary(inputs))
 	}
 	return ExitNothingToDiagnose
 }
@@ -287,7 +287,7 @@ func (o Options) attachAISummaries(ctx context.Context, results []containerResul
 			notice := aiNotice(err)
 			if !seen[notice] {
 				seen[notice] = true
-				fmt.Fprintln(o.ErrOut, notice)
+				_, _ = fmt.Fprintln(o.ErrOut, notice)
 			}
 			continue
 		}

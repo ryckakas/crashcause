@@ -54,10 +54,11 @@ var errLokiPushRejected = errors.New("sinks: loki rejected push")
 //
 // Credentials are taken from the environment ONLY — never from LokiConfig,
 // never from CLI flags — so they cannot end up in shell history, in a
-// serialised config, or in this process's own diagnostic output.
+// serialized config, or in this process's own diagnostic output.
 const (
-	lokiEnvUsername    = "LOKI_USERNAME"
-	lokiEnvPassword    = "LOKI_PASSWORD"
+	lokiEnvUsername = "LOKI_USERNAME"
+	lokiEnvPassword = "LOKI_PASSWORD"
+	//nolint:gosec // env var name holding the bearer token, not a credential itself
 	lokiEnvBearerToken = "LOKI_BEARER_TOKEN"
 )
 
@@ -95,7 +96,7 @@ type LokiConfig struct {
 	Timeout time.Duration
 }
 
-// LokiSink is the concrete behaviour of the sink returned by NewLoki: the
+// LokiSink is the concrete behavior of the sink returned by NewLoki: the
 // standard Sink contract plus observability into what the sink had to throw
 // away. Callers that want the drop counter (watch mode surfaces it) can type
 // assert the Sink returned by NewLoki to this interface.
@@ -113,8 +114,8 @@ type LokiSink interface {
 	LastError() error
 }
 
-// lokiEntry is one already-marshalled log line plus the two label values that
-// decide which Loki stream it belongs to. Marshalling happens in Emit so the
+// lokiEntry is one already-marshaled log line plus the two label values that
+// decide which Loki stream it belongs to. Marshaling happens in Emit so the
 // background goroutine only does I/O, and so a malformed Diagnosis is caught
 // on the caller's side.
 type lokiEntry struct {
@@ -153,7 +154,7 @@ type lokiSink struct {
 	quit chan struct{}
 	done chan struct{}
 
-	// baseCtx is cancelled by Close when the caller's context expires, so an
+	// baseCtx is canceled by Close when the caller's context expires, so an
 	// in-flight push cannot outlive Close and leak the goroutine.
 	baseCtx    context.Context
 	baseCancel context.CancelFunc
@@ -257,12 +258,12 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 func (s *lokiSink) Name() string { return "loki" }
 
 // Emit queues d for the next batch. It NEVER blocks: the Diagnosis is
-// marshalled inline and handed to the background flusher through a buffered
+// marshaled inline and handed to the background flusher through a buffered
 // channel with a non-blocking send.
 //
 // If the buffer is full (Loki is slow or down), the entry is DROPPED and the
 // Dropped() counter is incremented, and Emit still returns nil. That is
-// deliberate: dropping is the designed backpressure behaviour of a telemetry
+// deliberate: dropping is the designed backpressure behavior of a telemetry
 // sink, not a failure of the caller's diagnosis, and returning an error here
 // would make the watch loop treat a Loki outage as a diagnosis error. Use
 // Dropped() to surface the loss instead.

@@ -72,11 +72,12 @@ func firstEventByReason(in Inputs, reasons ...string) (Event, bool) {
 	return evs[0], true
 }
 
-// eventsMatching returns events with the given reason whose message contains
-// substr (case-insensitive).
-func eventsMatching(in Inputs, reason, substr string) []Event {
+// eventsMatching returns "Unhealthy" events whose message contains substr
+// (case-insensitive). The reason is fixed because every caller inspects probe
+// failures, which the kubelet always reports as "Unhealthy".
+func eventsMatching(in Inputs, substr string) []Event {
 	var out []Event
-	for _, e := range eventsByReason(in, reason) {
+	for _, e := range eventsByReason(in, "Unhealthy") {
 		if containsFold(e.Message, substr) {
 			out = append(out, e)
 		}
@@ -624,7 +625,7 @@ func parseEvictionResource(msg string) string {
 // Log-tail pattern scanning
 // ---------------------------------------------------------------------------
 
-// logHint is one recognised application-level failure pattern in the log tail.
+// logHint is one recognized application-level failure pattern in the log tail.
 type logHint struct {
 	Label string   // short machine-ish label, e.g. "go panic"
 	Note  string   // one clause explaining what the pattern means
@@ -701,7 +702,7 @@ func logPatterns() []logPattern {
 	}
 }
 
-// scanLogTail returns the recognised failure patterns in the log tail, most
+// scanLogTail returns the recognized failure patterns in the log tail, most
 // specific first, at most one hint per pattern.
 func scanLogTail(lines []string) []logHint {
 	var hints []logHint

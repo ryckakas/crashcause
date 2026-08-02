@@ -316,7 +316,7 @@ type promSample struct {
 func scrapeMetrics(t *testing.T, c *Controller) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	c.prom.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	c.prom.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), "GET", "/metrics", nil))
 	if rec.Code != 200 {
 		t.Fatalf("scrape /metrics: status %d", rec.Code)
 	}

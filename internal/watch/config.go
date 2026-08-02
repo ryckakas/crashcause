@@ -25,7 +25,7 @@ import (
 
 // Defaults applied by Config.withDefaults. They mirror the flag defaults in
 // internal/cli/watch.go so that programmatic callers and CLI users get the
-// same behaviour.
+// same behavior.
 const (
 	defaultReemitInterval = time.Hour
 	defaultDedupTTL       = 6 * time.Hour

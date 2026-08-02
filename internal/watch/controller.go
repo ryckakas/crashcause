@@ -172,17 +172,17 @@ func New(client kubernetes.Interface, cfg Config, summarizer *ai.Summarizer, out
 	return c, nil
 }
 
-// Run starts the controller and blocks until ctx is cancelled (or, with
+// Run starts the controller and blocks until ctx is canceled (or, with
 // leader election enabled, until the lease is lost). It always shuts the HTTP
 // servers down and closes the sinks before returning.
 func (c *Controller) Run(ctx context.Context) error {
-	servers, err := c.startServers()
+	servers, err := c.startServers(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		shutdownServers(servers)
-		c.closeSinks()
+		shutdownServers(ctx, servers)
+		c.closeSinks(ctx)
 	}()
 
 	if c.cfg.LeaderElect {
@@ -192,7 +192,7 @@ func (c *Controller) Run(ctx context.Context) error {
 }
 
 // runWork wires the informers, waits for their caches, and runs the worker
-// loops until ctx is cancelled. With leader election enabled this is the body
+// loops until ctx is canceled. With leader election enabled this is the body
 // that only ever runs while holding the lease.
 func (c *Controller) runWork(ctx context.Context) error {
 	factories, err := c.buildFactories()
@@ -228,7 +228,7 @@ func (c *Controller) runWork(ctx context.Context) error {
 		f.WaitForCacheSync(ctx.Done())
 	}
 	if ctx.Err() != nil {
-		return nil //nolint:nilerr // cancelled before we ever became ready: a clean stop
+		return nil //nolint:nilerr // canceled before we ever became ready: a clean stop
 	}
 
 	c.ready.Store(true)
@@ -354,7 +354,7 @@ func (c *Controller) worker(ctx context.Context) {
 // processPod collects, classifies and (subject to dedup) emits for one pod.
 //
 // It is the whole business logic of watch mode and is deliberately callable
-// synchronously, which is what makes the dedup behaviour testable without a
+// synchronously, which is what makes the dedup behavior testable without a
 // running informer.
 func (c *Controller) processPod(ctx context.Context, pod *corev1.Pod) {
 	if pod == nil {
@@ -570,9 +570,14 @@ func (c *Controller) reportLogSkips() {
 
 // closeSinks flushes and closes every sink exactly once, under a bounded
 // deadline so an unreachable Loki cannot hold shutdown hostage.
-func (c *Controller) closeSinks() {
+//
+// ctx is derived from the caller's context via context.WithoutCancel for the
+// same reason as shutdownServers: Run's deferred call happens exactly when
+// ctx has already been canceled, and an already-dead context would abort the
+// flush instead of honoring shutdownTimeout.
+func (c *Controller) closeSinks(ctx context.Context) {
 	c.closeSinksOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 		defer cancel()
 		for _, s := range c.sinkList {
 			if err := s.Close(ctx); err != nil {

@@ -28,7 +28,7 @@ const (
 )
 
 // runLeaderElected runs the work loop only while this replica holds the
-// lease. Losing the lease is a clean stop: runWork's context is cancelled,
+// lease. Losing the lease is a clean stop: runWork's context is canceled,
 // the informers stop, and Run returns errLostLeadership so the supervisor
 // restarts the process rather than leaving a half-stopped controller behind.
 func (c *Controller) runLeaderElected(ctx context.Context) error {

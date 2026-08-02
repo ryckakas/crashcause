@@ -131,12 +131,12 @@ func TestHTEventsMatching(t *testing.T) {
 		warning("Unhealthy", "Startup probe failed: connection refused", 1),
 	}
 
-	got := eventsMatching(in, "Unhealthy", "liveness")
+	got := eventsMatching(in, "liveness")
 	if len(got) != 1 || got[0].Message != "Liveness probe failed: HTTP 500" {
 		t.Fatalf("eventsMatching(Unhealthy, liveness) = %+v, want the liveness event only", got)
 	}
 
-	none := eventsMatching(in, "Unhealthy", "nonexistent-substring")
+	none := eventsMatching(in, "nonexistent-substring")
 	if len(none) != 0 {
 		t.Fatalf("eventsMatching with no match = %+v, want empty", none)
 	}
@@ -754,7 +754,7 @@ func TestHTParseSchedulingFailure(t *testing.T) {
 			wantKind: "pods",
 		},
 		{
-			name:     "unrecognised message",
+			name:     "unrecognized message",
 			msg:      "0/2 nodes are available: 2 node(s) had some unrelated problem.",
 			wantKind: "other",
 		},
@@ -803,7 +803,7 @@ func TestHTParseEvictionResource(t *testing.T) {
 		{"ephemeral-storage", "The node was low on resource: ephemeral-storage. Usage exceeds ...", "ephemeral-storage"},
 		{"pids", "The node was low on resource: pids. Too many processes", "pids"},
 		{"disk word only", "the node ran out of disk space entirely", "ephemeral-storage"},
-		{"unrecognised", "the pod was evicted for reasons unrelated to any known resource", ""},
+		{"unrecognized", "the pod was evicted for reasons unrelated to any known resource", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1233,7 +1233,7 @@ func TestHTSomethingIsWrong(t *testing.T) {
 		mutate func(*Inputs)
 		want   bool
 	}{
-		{"healthy baseline", func(in *Inputs) {}, false},
+		{"healthy baseline", func(_ *Inputs) {}, false},
 		{"restart count > 0", func(in *Inputs) { in.RestartCount = 1 }, true},
 		{"termination with nonzero exit", func(in *Inputs) { in.LastTermination = terminated(1, "Error") }, true},
 		{"termination with nonzero signal only", func(in *Inputs) {

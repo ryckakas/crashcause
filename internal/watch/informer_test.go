@@ -21,7 +21,11 @@ func deletedFinalStateUnknown(obj any) toolscache.DeletedFinalStateUnknown {
 func httpStatus(t *testing.T, addr, path string) int {
 	t.Helper()
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://" + addr + path)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, nil)
+	if err != nil {
+		return 0
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0
 	}
@@ -36,7 +40,7 @@ func httpStatus(t *testing.T, addr, path string) int {
 //
 // It asserts the wiring, not the policy: /healthz answers immediately,
 // /readyz only flips once the caches are synced, a pod created through the
-// clientset reaches the sinks, and cancelling the context stops Run cleanly.
+// clientset reaches the sinks, and canceling the context stops Run cleanly.
 func TestControllerInformerSmoke(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
 	cfg := dedupConfig(6*time.Hour, time.Hour)
@@ -99,7 +103,7 @@ func TestControllerInformerSmoke(t *testing.T) {
 			t.Fatalf("Run returned %v, want nil after context cancellation", err)
 		}
 	case <-time.After(15 * time.Second):
-		t.Fatal("Run did not return after the context was cancelled")
+		t.Fatal("Run did not return after the context was canceled")
 	}
 
 	// The listeners are shut down with Run.
@@ -173,11 +177,11 @@ func TestStartServersDisabled(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
 	c, _, _ := newTestController(t, clk, dedupConfig(time.Hour, time.Hour))
 
-	servers, err := c.startServers()
+	servers, err := c.startServers(t.Context())
 	if err != nil {
 		t.Fatalf("startServers: %v", err)
 	}
-	defer shutdownServers(servers)
+	defer shutdownServers(t.Context(), servers)
 
 	if len(servers) != 0 {
 		t.Fatalf("started %d servers with no addresses configured, want 0", len(servers))

@@ -122,6 +122,6 @@ func exitCodeFor(err error, errOut io.Writer) int {
 	if errors.As(err, &coded) {
 		return coded.code
 	}
-	fmt.Fprintln(errOut, "error:", err)
+	_, _ = fmt.Fprintln(errOut, "error:", err)
 	return 1
 }
