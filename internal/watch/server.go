@@ -24,7 +24,7 @@ const httpReadHeaderTimeout = 5 * time.Second
 //
 // /readyz flips to 200 only once the informer caches are synced, so a rolling
 // upgrade cannot cut over to a replica that has not yet seen the cluster.
-func (c *Controller) startServers() ([]*http.Server, error) {
+func (c *Controller) startServers(ctx context.Context) ([]*http.Server, error) {
 	health := strings.TrimSpace(c.cfg.HealthAddr)
 	metrics := strings.TrimSpace(c.cfg.MetricsAddr)
 
@@ -34,7 +34,7 @@ func (c *Controller) startServers() ([]*http.Server, error) {
 		mux := http.NewServeMux()
 		c.registerHealthRoutes(mux)
 		mux.Handle("/metrics", c.prom.Handler())
-		srv, addr, err := serveMux(metrics, mux)
+		srv, addr, err := serveMux(ctx, metrics, mux)
 		if err != nil {
 			return nil, err
 		}
@@ -48,7 +48,7 @@ func (c *Controller) startServers() ([]*http.Server, error) {
 	if health != "" {
 		mux := http.NewServeMux()
 		c.registerHealthRoutes(mux)
-		srv, addr, err := serveMux(health, mux)
+		srv, addr, err := serveMux(ctx, health, mux)
 		if err != nil {
 			return nil, err
 		}
@@ -59,9 +59,9 @@ func (c *Controller) startServers() ([]*http.Server, error) {
 	if metrics != "" {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", c.prom.Handler())
-		srv, addr, err := serveMux(metrics, mux)
+		srv, addr, err := serveMux(ctx, metrics, mux)
 		if err != nil {
-			shutdownServers(servers)
+			shutdownServers(ctx, servers)
 			return nil, err
 		}
 		servers = append(servers, srv)
@@ -93,8 +93,13 @@ func (c *Controller) registerHealthRoutes(mux *http.ServeMux) {
 // serveMux binds addr and serves mux in the background, returning the server
 // and the ADDRESS ACTUALLY BOUND (which differs from addr when the caller
 // asked for port 0, as tests do).
-func serveMux(addr string, mux *http.ServeMux) (*http.Server, string, error) {
-	ln, err := net.Listen("tcp", addr)
+//
+// ctx only bounds the listen call itself: (*net.ListenConfig).Listen uses it
+// to give up on a slow bind, but the returned listener's lifetime is
+// independent of ctx, so it keeps serving after ctx is done (shutdownServers,
+// not ctx cancellation, is what stops it).
+func serveMux(ctx context.Context, addr string, mux *http.ServeMux) (*http.Server, string, error) {
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return nil, "", fmt.Errorf("watch: listen on %s: %w", addr, err)
 	}
@@ -115,11 +120,19 @@ func isServerClosed(err error) bool {
 }
 
 // shutdownServers gracefully stops every server under one bounded deadline.
-func shutdownServers(servers []*http.Server) {
+//
+// ctx is derived from the caller's context so contextcheck sees the causal
+// link, but with context.WithoutCancel: callers (notably Controller.Run's
+// deferred shutdown) invoke this exactly when their ctx has already been
+// canceled, and shutting down with an already-dead context would abort the
+// graceful drain immediately instead of honoring shutdownTimeout. Context
+// values (trace IDs, etc.) still propagate; the caller's cancellation signal
+// and deadline are dropped in favor of shutdownTimeout.
+func shutdownServers(ctx context.Context, servers []*http.Server) {
 	if len(servers) == 0 {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 	defer cancel()
 	for _, srv := range servers {
 		if err := srv.Shutdown(ctx); err != nil {

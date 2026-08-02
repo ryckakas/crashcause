@@ -95,7 +95,7 @@ func stepsContain(d Diagnosis, substr string) bool {
 	return false
 }
 
-// matchRule runs a single rule's matcher, honouring its applicability filter,
+// matchRule runs a single rule's matcher, honoring its applicability filter,
 // exactly as Classify would. It is the spec's "rule in isolation" seam.
 func matchRule(cause CauseCode, in Inputs) *Diagnosis {
 	in = normalizeInputs(in)

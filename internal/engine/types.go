@@ -15,6 +15,8 @@ import "time"
 // metric labels) and must not be renumbered or renamed once released.
 type CauseCode string
 
+// CauseCode values enumerated by the engine, covering every crash cause the
+// classifier can currently detect (see AllCauses for the exhaustive list).
 const (
 	CauseOOMKilled            CauseCode = "oom_killed"
 	CauseSigkillUnattributed  CauseCode = "sigkill_unattributed"
@@ -61,6 +63,7 @@ func AllCauses() []CauseCode {
 // Confidence expresses how certain the engine is about a Diagnosis.
 type Confidence string
 
+// Confidence values, from most to least certain.
 const (
 	ConfidenceHigh   Confidence = "high"
 	ConfidenceMedium Confidence = "medium"
@@ -70,6 +73,7 @@ const (
 // ContainerKind distinguishes the role a container plays in a pod.
 type ContainerKind string
 
+// ContainerKind values a pod's containers may take on.
 const (
 	KindApp       ContainerKind = "app"
 	KindInit      ContainerKind = "init"

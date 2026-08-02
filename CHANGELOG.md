@@ -61,3 +61,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   README status block and the `examples/kind-demo/README.md` walkthrough to
   match the now-implemented `inspect`/`watch` commands and completed Helm
   chart.
+- Go toolchain moved from 1.23.1 to a pinned 1.25.0, pulled forward by the
+  security upgrades below.
+
+### Security
+
+- Upgraded indirect dependencies `golang.org/x/text` (v0.16.0 → v0.40.0) and
+  `golang.org/x/net` (v0.26.0 → v0.57.0) to clear govulncheck findings
+  GO-2026-5970, GO-2026-5026 and GO-2026-4918, all reachable through the AI
+  layer's HTTP client.
+
+### Fixed
+
+- `.golangci.yml`: removed the `exhaustive.check-generated` setting, which
+  golangci-lint v2.12 no longer accepts (config schema validation failed in
+  CI).

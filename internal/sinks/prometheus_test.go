@@ -26,7 +26,7 @@ func promNewTestSink(t *testing.T) *Prometheus {
 // since that is exactly what a real scraper would see.
 func promExposition(t *testing.T, p *Prometheus) string {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
 	p.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

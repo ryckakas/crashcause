@@ -83,7 +83,7 @@ func Classify(in Inputs) []Diagnosis {
 
 	// Lifecycle-noise guard (spec §4.2 / decision log #7): a SIGTERM
 	// termination inside a deletion or rolling-update context is normal
-	// Kubernetes behaviour, not a finding. Suppressing it here rather than
+	// Kubernetes behavior, not a finding. Suppressing it here rather than
 	// in a rule keeps every deploy from producing a stream of false crashes.
 	if isLifecycleNoise(in) {
 		return nil
@@ -106,7 +106,7 @@ func Classify(in Inputs) []Diagnosis {
 }
 
 // normalizeInputs applies engine-side defaults so that a zero-valued field
-// never changes classification behaviour in a surprising way.
+// never changes classification behavior in a surprising way.
 func normalizeInputs(in Inputs) Inputs {
 	in.Kind = effectiveKind(in)
 	if in.InitStuckThreshold <= 0 {

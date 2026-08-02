@@ -57,7 +57,7 @@ func livenessProbeContext(in Inputs) (unhealthy, killing []Event, ok bool) {
 	if effectiveKind(in) != KindApp {
 		return nil, nil, false
 	}
-	unhealthy = eventsMatching(in, "Unhealthy", "Liveness")
+	unhealthy = eventsMatching(in, "Liveness")
 	if len(unhealthy) == 0 {
 		return nil, nil, false
 	}
@@ -75,7 +75,7 @@ func startupProbeContext(in Inputs) (unhealthy, killing []Event, ok bool) {
 	if effectiveKind(in) != KindApp {
 		return nil, nil, false
 	}
-	unhealthy = eventsMatching(in, "Unhealthy", "Startup")
+	unhealthy = eventsMatching(in, "Startup")
 	if len(unhealthy) == 0 {
 		return nil, nil, false
 	}
