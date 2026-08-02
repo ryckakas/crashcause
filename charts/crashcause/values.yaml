@@ -1,0 +1,219 @@
+# Default values for the crashcause chart.
+#
+# This chart deploys `crashcause watch` — the long-running controller that
+# classifies pod crashes as they happen and emits the cause to its sinks.
+# It does NOT deploy anything for `crashcause inspect`: inspect is a kubectl
+# plugin that runs with the invoking user's own credentials and needs no
+# in-cluster component at all.
+
+# -- Override the chart name portion of resource names.
+nameOverride: ""
+# -- Override the full generated resource name.
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/ryckakas/crashcause
+  # -- Image tag. Empty string means "use the chart's appVersion".
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- Secrets for pulling the image, e.g. [{name: my-regcred}].
+imagePullSecrets: []
+
+# -- Number of watch replicas.
+# Keep this at 1 unless leaderElection.enabled is also true: every replica
+# runs its own informers and its own dedup cache, so N replicas without
+# leader election means N copies of every diagnosis in your logs/metrics.
+# With leaderElection.enabled=true the extra replicas sit idle as hot
+# standbys and only one is active.
+replicas: 1
+
+serviceAccount:
+  # -- Create a ServiceAccount for the controller.
+  create: true
+  # -- Name to use. Empty string means the generated fullname.
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# -- Root --log-level flag: debug|info|warn|error.
+logLevel: info
+
+# ---------------------------------------------------------------------------
+# What the controller watches
+# ---------------------------------------------------------------------------
+watch:
+  # -- Namespaces to watch. Empty list means all namespaces.
+  #
+  # NOTE (0.1.0): this scopes what the controller *watches*, not what the
+  # RBAC grants. The chart always creates a ClusterRole, even for a
+  # single-namespace list, because the controller also reads Node conditions
+  # (a cluster-scoped resource) for memory/disk-pressure evidence, and
+  # because cross-namespace informer setup is the tested path. If you need
+  # true namespace-scoped RBAC, install the chart with
+  # `serviceAccount.create=false`, point it at a ServiceAccount you bind
+  # yourself with Roles, and expect `evicted` evidence to degrade (no node
+  # conditions). Per-namespace Role generation is a candidate for a later
+  # chart version.
+  namespaces: []
+  # -- Label selector limiting which pods are watched, e.g. "tier!=batch".
+  selector: ""
+  # -- Minimum interval before re-emitting an unchanged diagnosis for the
+  # same (namespace, owner, container, cause) key. Log-noise control only:
+  # the Prometheus counter still increments on every observed crash.
+  reemitInterval: 1h
+  # -- How long a dedup key is remembered. Bounds controller memory; also
+  # drives Prometheus series cleanup.
+  dedupTTL: 6h
+  # -- Lines of previous-container log tail to collect per crash.
+  previousLines: 60
+  # -- How long an init container may run before it is called stuck.
+  initStuckThreshold: 10m
+
+# ---------------------------------------------------------------------------
+# Log collection — a severable privilege
+# ---------------------------------------------------------------------------
+# Setting enabled=false does two things at once:
+#   1. passes --collect-logs=false to the controller, and
+#   2. REMOVES the pod-log read rule from the ClusterRole entirely.
+# The controller then provably cannot read pod logs — it is not merely
+# configured not to. Rules degrade gracefully: app_exit_nonzero still fires
+# from exit codes and events, just without log-pattern hints, and the AI
+# layer becomes inert because there is nothing to send.
+logCollection:
+  enabled: true
+  # -- Namespaces whose pod logs may ever be fetched. Empty means all
+  # watched namespaces. This is a controller-side allowlist; the RBAC grant
+  # itself is cluster-wide when enabled=true.
+  namespaces: []
+  # -- Client-side token bucket on pod-log fetches, per minute. A crashloop
+  # storm must not turn the controller into an API-server DoS. Fetches over
+  # budget are skipped (diagnosis proceeds without log evidence) and counted
+  # in crashcause_log_fetches_skipped_total.
+  rateLimitPerMinute: 10
+
+# ---------------------------------------------------------------------------
+# Sinks
+# ---------------------------------------------------------------------------
+# stdout JSON is always on and is not configurable here: one JSON object per
+# line, which any log pipeline already scraping container stdout picks up
+# for free.
+
+metrics:
+  # -- Serve Prometheus metrics (--metrics-addr) and create a Service for
+  # them. Disabling this removes both the flag and the Service.
+  enabled: true
+  # -- Listen address. The Service port is derived from this value.
+  addr: ":9090"
+  service:
+    type: ClusterIP
+    annotations: {}
+
+serviceMonitor:
+  # -- Create a prometheus-operator ServiceMonitor. Requires metrics.enabled
+  # and the monitoring.coreos.com/v1 CRD to be present in the cluster.
+  enabled: false
+  # -- Extra labels, e.g. the release label your Prometheus selects on:
+  # {release: kube-prometheus-stack}
+  labels: {}
+  interval: ""
+  scrapeTimeout: ""
+  # -- `helm template` runs without a cluster connection, so the CRD
+  # capability check always fails there. Set this to true to render the
+  # ServiceMonitor anyway (GitOps pipelines that template offline).
+  skipCapabilityCheck: false
+
+loki:
+  # -- Loki push URL, e.g. http://loki:3100/loki/api/v1/push. Empty disables
+  # the Loki sink.
+  url: ""
+  # -- Name of an existing Secret holding Loki credentials. Its keys are
+  # injected as environment variables verbatim, so name them exactly:
+  # LOKI_USERNAME + LOKI_PASSWORD (basic auth) or LOKI_BEARER_TOKEN.
+  # The chart never creates this Secret and never accepts a plain value.
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# AI summarization — optional, off by default, bring your own key
+# ---------------------------------------------------------------------------
+# Redaction is best-effort pattern matching, NOT a guarantee. The namespace
+# allowlist below is the primary control; redaction is defense-in-depth. Do
+# not enable this for workloads whose logs may contain secrets you cannot
+# afford to send off-cluster. Provider `ollama` keeps everything in-cluster
+# and is the recommended option for privacy-sensitive environments.
+ai:
+  enabled: false
+  # -- anthropic | openai | ollama
+  provider: anthropic
+  # -- Override the provider base URL, e.g. http://ollama:11434 for ollama.
+  url: ""
+  # -- Namespaces whose logs may be sent to the AI provider. This allowlist
+  # is fail-closed: an EMPTY list keeps AI summarization off in every
+  # namespace even with ai.enabled=true. Use ["*"] to opt the whole cluster
+  # in — deliberately explicit, because it means every watched namespace's
+  # log tails may leave the cluster.
+  namespaces: []
+  redact: true
+  redactIPs: false
+  # -- Name of an existing Secret holding the provider API key. The chart
+  # NEVER creates this Secret and there is deliberately no plaintext key
+  # value in this file — a key in values.yaml ends up in Helm release
+  # storage and in your git history. Not needed for provider `ollama`.
+  #
+  #   kubectl create secret generic crashcause-ai \
+  #     --from-literal=api-key=sk-... -n <release namespace>
+  existingSecret: ""
+  # -- Key within that Secret. Mounted into CRASHCAUSE_AI_API_KEY.
+  secretKey: api-key
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+leaderElection:
+  # -- Enable client-go leader election. Adds a namespaced Role granting
+  # create/get/update on coordination.k8s.io Leases; without it, no lease
+  # permission is granted at all. Required before setting replicas > 1.
+  enabled: false
+
+# -- Address for the /healthz and /readyz endpoints. The probe port is
+# derived from this value.
+healthAddr: ":8081"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    # No CPU limit on purpose: throttling an informer-driven controller
+    # causes event-processing lag rather than saving anything useful.
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+# -- Extra args appended verbatim to the container command line. Escape
+# hatch for flags this chart does not model yet.
+extraArgs: []
+
+# -- Extra environment variables, in raw Kubernetes env format.
+extraEnv: []

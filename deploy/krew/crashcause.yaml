@@ -1,50 +1,106 @@
-# krew plugin manifest for crashcause.
+# krew plugin manifest for crashcause (`kubectl crashcause`).
 #
-# STATUS: this plugin is NOT yet published to the krew index
-# (https://github.com/kubernetes-sigs/krew-index). It is hand-maintained
-# here for local testing (`kubectl krew install --manifest=...`) and as the
+# STATUS: not yet published to the krew index
+# (https://github.com/kubernetes-sigs/krew-index). This file is
+# hand-maintained here for local installs
+# (`kubectl krew install --manifest=deploy/krew/crashcause.yaml`) and as the
 # basis for a future krew-index submission.
 #
-# `version` and every `sha256` below are release-time placeholders. They get
-# rewritten once the first real GitHub release exists and its
-# crashcause_<version>_checksums.txt is available (see the "krew:" note in
-# ../../.goreleaser.yaml - automation for this is tracked for milestone 9).
+# ---------------------------------------------------------------------------
+# RELEASE AUTOMATION CONTRACT
+# ---------------------------------------------------------------------------
+# .goreleaser.yaml deliberately does NOT use goreleaser's `krews:` publisher
+# (its availability varies across goreleaser versions); this manifest is the
+# single source of truth instead. Exactly three kinds of field are
+# release-time placeholders, and nothing else in this file needs to change
+# between releases:
 #
-# The `uri` values below must stay in sync with the archive `name_template`
-# in ../../.goreleaser.yaml: "crashcause_{{ .Version }}_{{ .Os }}_{{ .Arch }}".
+#   1. spec.version              -> the release tag, e.g. v0.1.0
+#   2. every platforms[].uri     -> the "v0.0.0" and "0.0.0" segments become
+#                                   the tag and the bare version
+#   3. every platforms[].sha256  -> 64 hex chars, taken from the release's
+#                                   crashcause_<version>_checksums.txt
+#
+# The placeholder sha256 values below are 64 zeros, which is a well-formed
+# but never-matching digest: an accidental install from an un-rewritten
+# manifest FAILS the checksum check rather than silently installing
+# something. Do not "fix" them by shortening or removing them.
+#
+# Rewrite recipe (release job, given TAG=v0.1.0 and the downloaded
+# checksums.txt):
+#
+#   VERSION="${TAG#v}"
+#   sed -i "s/version: v0.0.0/version: ${TAG}/" deploy/krew/crashcause.yaml
+#   sed -i "s|/download/v0.0.0/|/download/${TAG}/|g" deploy/krew/crashcause.yaml
+#   sed -i "s/crashcause_0.0.0_/crashcause_${VERSION}_/g" deploy/krew/crashcause.yaml
+#   # then, per platform, replace the zeros with the matching digest from
+#   # crashcause_${VERSION}_checksums.txt
+#
+# The `uri` filenames MUST stay in sync with the archive `name_template` in
+# ../../.goreleaser.yaml ("crashcause_{{ .Version }}_{{ .Os }}_{{ .Arch }}",
+# format tar.gz). The platform matrix below mirrors that file's
+# goos x goarch matrix exactly: linux and darwin, amd64 and arm64. There is
+# no windows build, so there is deliberately no windows selector here.
 apiVersion: krew.googlecontainertools.github.com/v1alpha2
 kind: Plugin
 metadata:
   name: crashcause
 spec:
-  version: v0.0.0 # placeholder - templated to the real tag at release time
+  version: v0.0.0 # placeholder - rewritten to the real tag at release time
   homepage: https://github.com/ryckakas/crashcause
-  shortDescription: Explain why a pod crashed
+  shortDescription: Explain why a Kubernetes pod crashed
   description: |
-    crashcause pulls a pod's status, recent events, previous-container logs,
-    and node conditions from the cluster API and classifies why it crashed
-    into a stable cause code (for example: OOMKilled, failing readiness
-    probe, missing secret/configmap, bad image reference, unschedulable, or
-    a stuck init container).
+    Answers "why did this pod crash?" without the usual ritual of
+    kubectl describe + kubectl logs --previous + digging through events.
 
-    STATUS: under active development. `crashcause inspect` and
-    `crashcause watch` are scaffolded but not yet implemented as of this
-    manifest - the CLI shape exists, but crash classification does not run
-    end-to-end yet.
+    crashcause pulls the pod's spec and status, its events, the previous
+    container's log tail, and the node's conditions straight from the
+    cluster API - nothing to copy, nothing to paste - and classifies the
+    crash into a stable cause code with confidence, the concrete evidence
+    it used, and suggested next steps.
+
+    Cause codes include oom_killed, sigkill_unattributed, evicted,
+    probe_liveness_failure, probe_startup_failure, image_pull_auth,
+    image_pull_not_found, image_pull_other, config_missing_reference,
+    volume_mount_failure, init_container_failure, init_container_stuck,
+    unschedulable, app_exit_nonzero, sigkill_after_grace and
+    completed_restart_loop.
+
+    Usage:
+
+      kubectl crashcause inspect <pod> -n <namespace>
+      kubectl crashcause inspect <pod> -n <namespace> --output json
+
+    Exit codes: 0 diagnosed, 2 nothing to diagnose (the pod is not
+    crashing), 1 error.
+
+    inspect runs entirely with your own kubeconfig credentials and needs no
+    in-cluster component. The same binary also has a `watch` mode - a
+    controller that turns crash causes into Prometheus labels and
+    structured log lines - which is deployed separately via the Helm chart
+    in the repository, not through this plugin.
+
+    An optional AI log-summarization layer (--ai) is available, off by
+    default, bring-your-own-key, with ollama supported for setups where no
+    data may leave the machine.
   caveats: |
-    This is a pre-release build. `inspect` and `watch` currently exit with
-    "not yet implemented". Track progress at
-    https://github.com/ryckakas/crashcause.
+    This is a pre-1.0 build. `kubectl crashcause inspect` is the supported
+    entry point; some cause codes and the in-cluster `watch` mode are still
+    being finished. Report anything that misdiagnoses at
+    https://github.com/ryckakas/crashcause/issues.
   platforms:
     - selector:
         matchLabels:
           os: darwin
           arch: amd64
       uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_amd64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      # placeholder digest - replaced from checksums.txt at release time
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
+          to: .
+        - from: LICENSE
           to: .
 
     - selector:
@@ -52,10 +108,13 @@ spec:
           os: darwin
           arch: arm64
       uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_arm64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      # placeholder digest - replaced from checksums.txt at release time
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
+          to: .
+        - from: LICENSE
           to: .
 
     - selector:
@@ -63,10 +122,13 @@ spec:
           os: linux
           arch: amd64
       uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_amd64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      # placeholder digest - replaced from checksums.txt at release time
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
+          to: .
+        - from: LICENSE
           to: .
 
     - selector:
@@ -74,8 +136,11 @@ spec:
           os: linux
           arch: arm64
       uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_arm64.tar.gz
-      sha256: "0000000000000000000000000000000000000000000000000000000000000" # placeholder, filled in at release time
+      # placeholder digest - replaced from checksums.txt at release time
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
+          to: .
+        - from: LICENSE
           to: .

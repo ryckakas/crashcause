@@ -1,0 +1,24 @@
+{{- if .Values.metrics.enabled }}
+# Metrics-only Service. crashcause serves no user-facing traffic, so this
+# exists purely so Prometheus (or a ServiceMonitor) has something to scrape.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "crashcause.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+  {{- with .Values.metrics.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.metrics.service.type }}
+  ports:
+    - name: metrics
+      port: {{ include "crashcause.metricsPort" . }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "crashcause.selectorLabels" . | nindent 4 }}
+{{- end }}

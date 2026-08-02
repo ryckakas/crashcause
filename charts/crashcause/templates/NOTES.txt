@@ -1,0 +1,99 @@
+crashcause {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Watch the diagnosis stream (stdout JSON, one object per line — this is the
+default sink and needs no configuration; anything already scraping container
+stdout picks it up):
+
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -f
+
+Scope
+{{- if .Values.watch.namespaces }}
+  Namespaces watched: {{ join ", " .Values.watch.namespaces }}
+{{- else }}
+  Namespaces watched: all
+{{- end }}
+{{- if .Values.watch.selector }}
+  Pod selector:       {{ .Values.watch.selector }}
+{{- end }}
+  Re-emit interval:   {{ .Values.watch.reemitInterval }} (dedup TTL {{ .Values.watch.dedupTTL }})
+
+Log collection
+{{- if .Values.logCollection.enabled }}
+  ENABLED. The controller may read the previous container's log tail
+  ({{ .Values.watch.previousLines }} lines, at most {{ .Values.logCollection.rateLimitPerMinute }} fetches/minute).
+{{- if .Values.logCollection.namespaces }}
+  Restricted to namespaces: {{ join ", " .Values.logCollection.namespaces }}
+{{- end }}
+  To remove the log-read permission from RBAC entirely (not just disable it
+  in config), reinstall with --set logCollection.enabled=false. Verify with:
+
+    kubectl get clusterrole {{ include "crashcause.fullname" . }} -o yaml
+{{- else }}
+  DISABLED. The log-read rule was removed from the ClusterRole — the
+  controller cannot read container log contents at all. Classification still
+  works from exit codes, container statuses and events; only log-pattern
+  hints are lost, and the AI layer has nothing to send.
+{{- end }}
+
+{{ if .Values.metrics.enabled -}}
+Metrics
+  Serving on {{ .Values.metrics.addr }}, Service {{ include "crashcause.fullname" . }}-metrics:{{ include "crashcause.metricsPort" . }}
+
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "crashcause.fullname" . }}-metrics {{ include "crashcause.metricsPort" . }}:{{ include "crashcause.metricsPort" . }}
+    curl localhost:{{ include "crashcause.metricsPort" . }}/metrics | grep crashcause_
+
+  Example queries:
+    sum by (cause) (rate(crashcause_diagnoses_total[5m]))
+    topk(10, sum by (namespace, owner_name) (increase(crashcause_diagnoses_total[24h])))
+
+  Dashboard and alert examples ship in the repo:
+    examples/grafana-dashboard.json
+    examples/prometheus-alerts.yaml
+{{- if not .Values.serviceMonitor.enabled }}
+
+  Using the Prometheus operator? Set serviceMonitor.enabled=true (and
+  serviceMonitor.labels to whatever your Prometheus selects on).
+{{- end }}
+{{- else -}}
+Metrics
+  DISABLED (metrics.enabled=false). No metrics endpoint and no Service.
+{{- end }}
+
+{{ if .Values.loki.url -}}
+Loki
+  Pushing to {{ .Values.loki.url }}
+{{- if not .Values.loki.existingSecret }}
+  No credentials configured (loki.existingSecret is empty). If your Loki
+  requires auth, create a Secret with LOKI_USERNAME/LOKI_PASSWORD or
+  LOKI_BEARER_TOKEN and set loki.existingSecret to its name.
+{{- end }}
+{{- end }}
+
+{{ if .Values.ai.enabled -}}
+AI summarization is ENABLED (provider: {{ .Values.ai.provider }}).
+{{- if .Values.ai.namespaces }}
+  Namespace allowlist: {{ join ", " .Values.ai.namespaces }}
+{{- if has "*" .Values.ai.namespaces }}
+  WARNING: "*" opts in EVERY watched namespace, so log tails from any
+  workload in the cluster may be sent to the provider.
+{{- end }}
+{{- else }}
+  NOTE: ai.namespaces is empty and the allowlist is fail-closed, so no
+  namespace is actually opted in and nothing will be summarized. Set
+  ai.namespaces to the namespaces you want (or ["*"] for all of them).
+{{- end }}
+{{- if and (ne .Values.ai.provider "ollama") (not .Values.ai.existingSecret) }}
+  WARNING: ai.existingSecret is empty, so CRASHCAUSE_AI_API_KEY is not set
+  and summarization will fail (diagnoses themselves are unaffected).
+{{- end }}
+  Redaction is best-effort pattern matching, NOT a guarantee. The namespace
+  allowlist is the primary control. For zero data leaving the cluster, use
+  ai.provider=ollama with ai.url pointing at an in-cluster instance.
+{{- end }}
+
+{{- if and (gt (int .Values.replicas) 1) (not .Values.leaderElection.enabled) }}
+
+WARNING: replicas={{ .Values.replicas }} with leaderElection.enabled=false. Every replica
+will independently observe and emit every crash, so expect duplicate log
+lines and inflated counters. Set leaderElection.enabled=true.
+{{- end }}

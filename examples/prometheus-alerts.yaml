@@ -1,0 +1,115 @@
+# crashcause — example Prometheus alerting rules
+#
+# This is a PLAIN Prometheus rules file (a top-level "groups:" list), meant to
+# be used directly with vanilla Prometheus — no prometheus-operator required.
+#
+# Usage with vanilla Prometheus:
+#   1. Copy/mount this file wherever Prometheus can read it, e.g.
+#      /etc/prometheus/rules/crashcause-alerts.yaml
+#   2. Reference it from prometheus.yml:
+#
+#        rule_files:
+#          - /etc/prometheus/rules/crashcause-alerts.yaml
+#
+#   3. Reload Prometheus (SIGHUP, or POST /-/reload if --web.enable-lifecycle
+#      is set) or restart it.
+#
+# Usage with prometheus-operator:
+#   prometheus-operator does not consume this file directly — it watches
+#   PrometheusRule custom resources instead. Wrap the same "groups:" content
+#   below in a PrometheusRule manifest, e.g.:
+#
+#     apiVersion: monitoring.coreos.com/v1
+#     kind: PrometheusRule
+#     metadata:
+#       name: crashcause-alerts
+#       labels: {release: kube-prometheus-stack}   # match your Prometheus's ruleSelector
+#     spec:
+#       groups:
+#         # ... paste the "groups:" list from this file here ...
+#
+#   Apply it with `kubectl apply -f`; the operator's Prometheus config-reloader
+#   sidecar picks it up automatically, no manual reload needed.
+#
+# IMPORTANT: every threshold, "for" duration, and severity below is a
+# conservative STARTING POINT, not a validated production value. Crash volume,
+# acceptable noise levels, and what counts as "sustained" all vary per
+# cluster and per team's on-call tolerance. Tune every expr/for/severity here
+# against your own workload's baseline before relying on it to page anyone.
+
+groups:
+  - name: crashcause
+    interval: 1m
+    rules:
+      # ---
+      # Tuning rationale: any OOM kill at all is worth knowing about — there's
+      # no meaningful "noise floor" for oom_killed the way there might be for
+      # a flaky liveness probe, so this fires on the first occurrence in the
+      # window (threshold > 0) with for: 0m (no debounce). The 15m lookback
+      # just smooths over scrape-interval edge effects; it is not a debounce
+      # window. Raise the threshold above 0 if a workload is known to OOM
+      # sporadically under expected load and that's considered acceptable.
+      - alert: CrashcauseOOMKills
+        expr: sum by (namespace, owner_kind, owner_name) (increase(crashcause_diagnoses_total{cause="oom_killed"}[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: crashcause
+        annotations:
+          summary: "OOM kill(s) detected for {{ $labels.owner_kind }}/{{ $labels.owner_name }} in {{ $labels.namespace }}"
+          description: "{{ $labels.namespace }}/{{ $labels.owner_kind }}/{{ $labels.owner_name }} was OOM-killed {{ $value | printf \"%.0f\" }} time(s) in the last 15 minutes. Next step: raise the container's memory limit, or investigate a possible memory leak if kills recur after raising it."
+
+      # ---
+      # Tuning rationale: a single crash of any cause is normal jitter for
+      # many workloads (deploys, node maintenance, etc.), so this alert
+      # requires a non-zero crash *rate* to persist for 30 minutes straight
+      # before firing — that's the signal for "this is an ongoing crashloop,
+      # not a one-off blip." Shorten "for" if 30 minutes of unattended
+      # crashlooping is already unacceptable for your SLOs; lengthen it if
+      # your workloads routinely wobble for longer during normal rollouts.
+      - alert: CrashcauseCrashloopSustained
+        expr: sum by (namespace, owner_kind, owner_name, cause) (rate(crashcause_diagnoses_total[15m])) > 0
+        for: 30m
+        labels:
+          severity: warning
+          service: crashcause
+        annotations:
+          summary: "{{ $labels.owner_kind }}/{{ $labels.owner_name }} in {{ $labels.namespace }} has been crashing continuously for 30m"
+          description: "{{ $labels.namespace }}/{{ $labels.owner_kind }}/{{ $labels.owner_name }} has shown a sustained non-zero crash rate (cause={{ $labels.cause }}) for at least 30 minutes — this is an ongoing crashloop, not an isolated incident. Current rate: {{ $value | printf \"%.4f\" }}/s."
+
+      # ---
+      # Tuning rationale: deliberately for: 0m. Unlike OOM kills or generic
+      # crashlooping, an image-pull auth failure (expired/rotated/misscoped
+      # imagePullSecret, wrong registry credentials, etc.) does not self-heal
+      # by waiting — every retry will fail identically until a human fixes
+      # the credential, so there is no value in debouncing this one. Fire on
+      # the first occurrence.
+      - alert: CrashcauseImagePullAuth
+        expr: sum by (namespace, owner_kind, owner_name) (increase(crashcause_diagnoses_total{cause="image_pull_auth"}[10m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: crashcause
+        annotations:
+          summary: "Image pull auth failure for {{ $labels.owner_kind }}/{{ $labels.owner_name }} in {{ $labels.namespace }}"
+          description: "{{ $labels.namespace }}/{{ $labels.owner_kind }}/{{ $labels.owner_name }} failed to pull its image due to an authentication/authorization error {{ $value | printf \"%.0f\" }} time(s) in the last 10 minutes. This is almost always a broken or expired imagePullSecret and will not self-heal — check the secret and registry credentials."
+
+      # ---
+      # Tuning rationale: informational, not actionable on its own — growth
+      # here doesn't mean anything is broken, only that the client-side
+      # pod-log token bucket (default 10 fetches/minute) is saturated, so
+      # some diagnoses are being made without log evidence. The 30m "for"
+      # avoids paging on a brief burst (e.g. a single node's pods all
+      # restarting at once); severity is "info" rather than "warning" because
+      # the underlying diagnoses are still happening, just with reduced
+      # confidence. Raise --log-rate-limit if this fires routinely in a
+      # cluster with consistently high crash volume.
+      - alert: CrashcauseLogFetchesSkipped
+        expr: rate(crashcause_log_fetches_skipped_total[15m]) > 0
+        for: 30m
+        labels:
+          severity: info
+          service: crashcause
+        annotations:
+          summary: "crashcause pod-log rate limiter has been dropping fetches for 30m"
+          description: "The pod-log rate limiter (default 10/min, tune via --log-rate-limit) has been skipping log fetches for at least 30 minutes (current rate: {{ $value | printf \"%.4f\" }}/s). Diagnoses are still being produced, but without log evidence backing them. Either a crash storm is in progress across the cluster, or the rate limit needs raising."

@@ -1,0 +1,30 @@
+apiVersion: v2
+name: crashcause
+description: >-
+  Runs crashcause in watch mode: classifies why pods crash and exposes the
+  cause as a Prometheus label, a structured stdout log line, or a Loki stream.
+type: application
+
+# version   = the chart's own version (bumped on every chart change)
+# appVersion = the crashcause release this chart defaults to (image tag)
+version: 0.1.0
+appVersion: "0.1.0"
+
+kubeVersion: ">=1.23.0-0"
+
+home: https://github.com/ryckakas/crashcause
+sources:
+  - https://github.com/ryckakas/crashcause
+keywords:
+  - kubernetes
+  - crashloopbackoff
+  - troubleshooting
+  - diagnostics
+  - observability
+  - prometheus
+maintainers:
+  - name: ryckakas
+    url: https://github.com/ryckakas
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "false"

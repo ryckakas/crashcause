@@ -1,0 +1,102 @@
+{{- $fullName := include "crashcause.fullname" . -}}
+# ---------------------------------------------------------------------------
+# Every privilege below is individually severable.
+#
+# Nothing here is a write verb. Nothing here reads Secrets or ConfigMaps.
+# The one privilege that can see workload *contents* rather than metadata is
+# the container log read, and it is templated out of existence — not merely
+# switched off in config — by logCollection.enabled=false.
+#
+# See charts/crashcause/README.md for the per-permission table: what it is
+# for, what removing it costs you, and how to remove it.
+# ---------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+rules:
+  # Pod spec + status: container statuses, lastState.terminated (exit code,
+  # reason, signal), restart counts, QoS class, resource requests/limits.
+  # This is the primary evidence source. Removing it disables the tool.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+  # Events: Killing, Unhealthy, BackOff, Failed, FailedScheduling, Evicted,
+  # FailedMount, ... Removing it loses every events-only cause
+  # (unschedulable, volume_mount_failure, probe_*, image_pull_*).
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Node conditions (MemoryPressure, DiskPressure) for the crashed pod's
+  # node. Read-only metadata about the node object, no node access of any
+  # kind. Removing it only weakens the evidence attached to eviction and
+  # unattributed-SIGKILL diagnoses; nothing stops working.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+{{- if .Values.logCollection.enabled }}
+
+  # Previous-container log tail (the `kubectl logs --previous` equivalent),
+  # capped at watch.previousLines and rate-limited client-side to
+  # logCollection.rateLimitPerMinute fetches per minute.
+  #
+  # THIS RULE DISAPPEARS ENTIRELY when logCollection.enabled=false. That is
+  # the point: a reviewer can confirm from `kubectl get clusterrole` that
+  # the controller cannot read log contents, without trusting a flag.
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $fullName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "crashcause.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.leaderElection.enabled }}
+---
+# Leader election is the only stateful thing the controller does, and it is
+# opt-in. The Lease lives in the release namespace, so this is a namespaced
+# Role rather than another cluster-wide grant: with leaderElection.enabled
+# =false no lease permission exists anywhere.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullName }}-leaderelection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create", "get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullName }}-leaderelection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullName }}-leaderelection
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "crashcause.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

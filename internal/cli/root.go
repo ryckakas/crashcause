@@ -5,13 +5,37 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+// exitCodeError carries a process exit code out of a cobra RunE, which can
+// only return an error. Execute unwraps it and returns the code verbatim
+// WITHOUT printing anything: a command returning one has already rendered
+// whatever the user needs to see (e.g. inspect's exit 2 "nothing to diagnose"
+// report). Every other error is a real failure and is printed as usual.
+type exitCodeError struct {
+	code int
+}
+
+func (e exitCodeError) Error() string {
+	return fmt.Sprintf("exit code %d", e.code)
+}
+
+// exitCode converts a mode's exit code into the error RunE must return: nil
+// for success, an exitCodeError otherwise.
+func exitCode(code int) error {
+	if code == 0 {
+		return nil
+	}
+	return exitCodeError{code: code}
+}
 
 // BuildInfo carries version metadata injected at link time via
 // -X main.version=..., -X main.commit=..., -X main.date=... (see
@@ -79,12 +103,25 @@ func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 
 // Execute builds and runs the root command, returning the process exit
 // code. Errors are printed to stderr; usage is not dumped on error since
-// most errors at this stage are "not yet implemented", not misuse.
+// most errors here are runtime failures, not misuse.
+//
+// A command that owns its own exit code (and its own output) signals it by
+// returning an exitCodeError; that code is passed through untouched and
+// nothing extra is printed.
 func Execute(build BuildInfo) int {
-	root := NewRootCmd(build)
-	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		return 1
+	return exitCodeFor(NewRootCmd(build).Execute(), os.Stderr)
+}
+
+// exitCodeFor maps a root-command error onto a process exit code, printing
+// only the errors nobody has reported yet.
+func exitCodeFor(err error, errOut io.Writer) int {
+	if err == nil {
+		return 0
 	}
-	return 0
+	var coded exitCodeError
+	if errors.As(err, &coded) {
+		return coded.code
+	}
+	fmt.Fprintln(errOut, "error:", err)
+	return 1
 }

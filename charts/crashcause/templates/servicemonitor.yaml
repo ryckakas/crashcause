@@ -1,0 +1,32 @@
+{{- if and .Values.serviceMonitor.enabled .Values.metrics.enabled }}
+{{- if or (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") .Values.serviceMonitor.skipCapabilityCheck }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "crashcause.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "crashcause.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      {{- with .Values.serviceMonitor.interval }}
+      interval: {{ . }}
+      {{- end }}
+      {{- with .Values.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+{{- else }}
+{{- fail "serviceMonitor.enabled=true but the monitoring.coreos.com/v1 CRD is not present in the target cluster. Install the Prometheus operator first, or set serviceMonitor.skipCapabilityCheck=true if you are rendering offline (e.g. `helm template` in a GitOps pipeline)." }}
+{{- end }}
+{{- end }}

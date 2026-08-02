@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "crashcause.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "crashcause.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  # The controller holds only in-memory dedup state, and two replicas
+  # briefly overlapping would double-emit. Recreate avoids that; the tool is
+  # not in any request path, so a few seconds of downtime costs nothing.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "crashcause.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "crashcause.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "crashcause.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: crashcause
+          image: {{ include "crashcause.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+{{ include "crashcause.args" . | indent 12 }}
+          ports:
+            - name: health
+              containerPort: {{ include "crashcause.healthPort" . }}
+              protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ include "crashcause.metricsPort" . }}
+              protocol: TCP
+            {{- end }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if and .Values.ai.enabled .Values.ai.existingSecret }}
+            # The API key is read from the environment only. It is never a
+            # flag (process listings leak flags) and never logged. The chart
+            # does not create this Secret and cannot accept a plain value.
+            - name: CRASHCAUSE_AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ai.existingSecret | quote }}
+                  key: {{ .Values.ai.secretKey | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if and .Values.loki.url .Values.loki.existingSecret }}
+          # Loki credentials, injected verbatim from a Secret you own. Keys
+          # must be named LOKI_USERNAME + LOKI_PASSWORD (basic auth) or
+          # LOKI_BEARER_TOKEN.
+          envFrom:
+            - secretRef:
+                name: {{ .Values.loki.existingSecret | quote }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # The root filesystem is read-only; this is the only writable path,
+        # and it holds nothing that must survive a restart.
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30

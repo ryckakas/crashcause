@@ -1,11 +1,14 @@
 package cli
 
 import (
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
+
+	"github.com/ryckakas/crashcause/internal/inspect"
 )
 
 // inspectOptions holds all flag-bound settings for the inspect command.
@@ -14,6 +17,7 @@ type inspectOptions struct {
 	output          string
 	previousLines   int
 	initStuckThresh time.Duration
+	verbose         bool
 	ai              aiOptions
 	configFlags     *genericclioptions.ConfigFlags
 }
@@ -35,10 +39,12 @@ pod and prints a classified crash diagnosis.`,
 	}
 
 	fs := cmd.Flags()
-	fs.StringVarP(&opts.container, "container", "c", "", "container to inspect (default: the only container, or the first if unambiguous)")
+	fs.StringVarP(&opts.container, "container", "c", "", "container to inspect (default: every container of the pod that warrants diagnosis)")
 	fs.StringVar(&opts.output, "output", "human", "output format: human|json")
 	fs.IntVar(&opts.previousLines, "previous-lines", 60, "number of lines to fetch from the previous container's log tail")
 	fs.DurationVar(&opts.initStuckThresh, "init-stuck-threshold", 10*time.Minute, "how long an init container may run before it is considered stuck")
+	// No -v shorthand: it is cobra's conventional shorthand for --version.
+	fs.BoolVar(&opts.verbose, "verbose", false, "report every rule that matched, not just the primary diagnosis")
 
 	opts.ai.addAIFlags(fs)
 
@@ -50,6 +56,49 @@ pod and prints a classified crash diagnosis.`,
 	return cmd
 }
 
-func runInspect(_ *cobra.Command, _ []string, _ *inspectOptions) error {
-	return errors.New("inspect: not yet implemented")
+// runInspect builds a cluster client from the standard kubeconfig flags and
+// hands off to the inspect package, which owns every rendering and exit-code
+// decision. Errors returned from here are pre-flight failures (bad kubeconfig,
+// bad AI configuration) and are printed by Execute; anything inspect.Run
+// reports itself comes back as an exitCodeError so it is not printed twice.
+func runInspect(cmd *cobra.Command, args []string, opts *inspectOptions) error {
+	restConfig, err := opts.configFlags.ToRESTConfig()
+	if err != nil {
+		return fmt.Errorf("loading kubeconfig: %w", err)
+	}
+	client, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("building kubernetes client: %w", err)
+	}
+
+	summarizer, err := opts.ai.buildSummarizer()
+	if err != nil {
+		return err
+	}
+
+	code := inspect.Run(cmd.Context(), client, inspect.Options{
+		Namespace:          resolveNamespace(opts.configFlags),
+		Pod:                args[0],
+		Container:          opts.container,
+		PreviousLines:      int64(opts.previousLines),
+		InitStuckThreshold: opts.initStuckThresh,
+		Output:             opts.output,
+		Verbose:            opts.verbose,
+		Summarizer:         summarizer,
+		Out:                cmd.OutOrStdout(),
+		ErrOut:             cmd.ErrOrStderr(),
+	})
+	return exitCode(code)
+}
+
+// resolveNamespace applies the documented precedence: the -n/--namespace flag
+// wins, then the current kubeconfig context's namespace, then "default".
+func resolveNamespace(flags *genericclioptions.ConfigFlags) string {
+	if flags.Namespace != nil && *flags.Namespace != "" {
+		return *flags.Namespace
+	}
+	if ns, _, err := flags.ToRawKubeConfigLoader().Namespace(); err == nil && ns != "" {
+		return ns
+	}
+	return "default"
 }

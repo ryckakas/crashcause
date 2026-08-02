@@ -19,3 +19,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - goreleaser release configuration: multi-arch `ghcr.io` container image and SBOM
   generation.
 - kind-demo example manifests.
+- Helm chart at `charts/crashcause/` for running `watch` mode in-cluster:
+  Deployment, ServiceAccount, RBAC, optional metrics Service and
+  ServiceMonitor, NOTES.txt, and a chart README documenting every value.
+- Severable RBAC in the chart: `logCollection.enabled=false` removes the
+  `pods/log` rule from the ClusterRole entirely (not just the
+  `--collect-logs` flag), and leader election's `leases` permission is a
+  namespaced Role granted only when `leaderElection.enabled=true`.
+- Chart secret handling: `ai.existingSecret`/`ai.secretKey` mounted into
+  `CRASHCAUSE_AI_API_KEY` and `loki.existingSecret` injected as env; the
+  chart never creates a Secret and never accepts a plaintext key.
+- `examples/grafana-dashboard.json` — importable dashboard (crash causes over
+  time, top crashing workloads, per-cause stats, log-fetch rate-limit
+  saturation) with datasource/namespace/cause template variables.
+- `examples/prometheus-alerts.yaml` — plain Prometheus rules file (also
+  usable as a `PrometheusRule` body) covering OOM kills, sustained
+  crashlooping, image-pull auth failures, and log-fetch rate-limit
+  saturation.
+- Full project README: install paths (krew manifest and Helm), `inspect` and
+  `watch` usage, sink documentation, the AI layer's privacy notice, and the
+  severable-privileges security section.
+
+### Changed
+
+- krew manifest: valid 64-character sha256 placeholders (a well-formed but
+  never-matching digest, so an un-rewritten manifest fails the checksum check
+  instead of installing something), a documented release-time rewrite
+  contract, LICENSE included in the extracted files, and a description
+  consistent with the README.
