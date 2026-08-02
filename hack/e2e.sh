@@ -369,7 +369,7 @@ cond_unschedulable() {
 INIT_FIRST_SEEN=""
 cond_init_stuck() {
   local pod="$1" started now start_epoch elapsed
-  started="$(jsonpath "$pod" '{.initContainerStatuses[0].state.running.startedAt}')"
+  started="$(jsonpath "$pod" '{.status.initContainerStatuses[0].state.running.startedAt}')"
   [ -n "$started" ] || return 1
 
   now="$(date +%s)"
