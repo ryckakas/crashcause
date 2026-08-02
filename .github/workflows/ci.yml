@@ -54,17 +54,17 @@ jobs:
       - name: Test (race + coverage)
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
-      # There are no *_test.go files yet (milestone 1 scaffold), so `go test`
-      # passes trivially with "no test files" and coverage.out may be empty
-      # or missing. This step is informational only and must never fail the
-      # job on that account - it just surfaces whatever coverage exists.
+      # Informational only: coverage is reported, never enforced here (spec
+      # §8a: report, don't hard-fail on a percentage). The empty-file branch
+      # exists so a failed test run cannot turn into a confusing `go tool
+      # cover` error on top of the real failure.
       - name: Coverage summary
         if: always()
         run: |
           if [ -s coverage.out ]; then
-            go tool cover -func=coverage.out || echo "note: coverage.out had no usable data yet"
+            go tool cover -func=coverage.out || echo "note: coverage.out had no usable data"
           else
-            echo "note: coverage.out is empty or missing - no tests exist yet at this milestone"
+            echo "note: coverage.out is empty or missing - the test step likely failed above"
           fi
 
       - uses: actions/upload-artifact@v7.0.1
@@ -121,9 +121,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-  # --- helm: required, but self-skips cleanly while charts/crashcause/ does
-  #     not exist yet (milestone 9). Once the chart exists, this becomes a
-  #     real gate on `helm lint` plus the pods/log RBAC toggle contract.
+  # --- helm: required and gating. charts/crashcause/ exists, so this really
+  #     runs `helm lint` plus both `helm template` renders and enforces the
+  #     severable-RBAC contract from spec §8: the `pods/log` rule is present by
+  #     default and templated out of existence with logCollection.enabled=false
+  #     (charts/crashcause/templates/rbac.yaml is the only place that string
+  #     appears in the chart, so these greps cannot pass by accident).
+  #     The directory guard is kept as a cheap invariant: if the chart ever
+  #     disappears, the job says so instead of failing with a helm usage error.
   helm:
     name: Helm chart checks
     runs-on: ubuntu-latest
@@ -139,8 +144,8 @@ jobs:
           set -euo pipefail
 
           if [ ! -d charts/crashcause ]; then
-            echo "charts/crashcause not present yet (milestone 9) - skipping helm checks"
-            exit 0
+            echo "FAIL: charts/crashcause is missing - the chart is part of the release contract"
+            exit 1
           fi
 
           helm lint charts/crashcause
@@ -162,10 +167,11 @@ jobs:
           echo "OK: pods/log is absent when logCollection.enabled=false"
 
   # --- e2e-kind: best effort only, never blocks the pipeline ----------------
-  # `inspect` and `watch` currently return "not yet implemented", so this job
-  # cannot assert cause codes yet. It exercises the plumbing (cluster, demo
-  # manifests, CLI invocation) and logs output for visibility. Cause-code
-  # assertions get enabled in milestone 3, once `inspect` works end-to-end.
+  # Per spec §9 this job is explicitly non-gating (continue-on-error), because
+  # it depends on a live cluster and on Docker Hub being reachable. It does,
+  # however, make real assertions: hack/e2e.sh asserts the exact cause code and
+  # exit code for every examples/kind-demo scenario plus a healthy control pod.
+  # A red X here means a genuine classification regression worth reading.
   e2e-kind:
     name: E2E (kind, best effort)
     runs-on: ubuntu-latest
@@ -181,74 +187,56 @@ jobs:
       - name: Build crashcause binary
         run: |
           mkdir -p bin
-          go build -o bin/crashcause ./cmd/crashcause
+          CGO_ENABLED=0 go build -o bin/crashcause ./cmd/crashcause
 
+      # kind-action passes --name explicitly, which overrides the `name:` field
+      # inside kind-config.yaml - so cluster_name is set here to match it, and
+      # the deletion step below can name the cluster deterministically.
       - name: Create kind cluster (using examples/kind-demo/kind-config.yaml)
         if: hashFiles('examples/kind-demo/kind-config.yaml') != ''
         uses: helm/kind-action@v1.14.0
         with:
           config: examples/kind-demo/kind-config.yaml
+          cluster_name: crashcause-demo
 
       - name: Create kind cluster (default config fallback)
         if: hashFiles('examples/kind-demo/kind-config.yaml') == ''
         uses: helm/kind-action@v1.14.0
+        with:
+          cluster_name: crashcause-demo
 
-      - name: Apply demo workload manifests
+      # jq is preinstalled on GitHub-hosted ubuntu runners; this step only
+      # matters on self-hosted or slimmed-down images, where every assertion
+      # in hack/e2e.sh would otherwise fail on a missing tool.
+      - name: Ensure jq is installed
         run: |
-          if [ ! -d examples/kind-demo ]; then
-            echo "examples/kind-demo not present - skipping apply"
-            exit 0
+          if command -v jq >/dev/null 2>&1; then
+            echo "jq present: $(jq --version)"
+          else
+            sudo apt-get update && sudo apt-get install -y jq
           fi
 
-          # kind-config.yaml is a kind Cluster config, not a k8s resource -
-          # `kubectl apply -f examples/kind-demo/` on the whole directory
-          # would fail on it, so apply only the workload manifests.
-          shopt -s nullglob
-          files=()
-          for f in examples/kind-demo/*.yaml; do
-            base="$(basename "$f")"
-            if [ "$base" = "kind-config.yaml" ]; then
-              continue
-            fi
-            files+=("$f")
-          done
-
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No workload manifests found in examples/kind-demo/ yet - skipping apply"
-            exit 0
-          fi
-
-          kubectl apply -f "${files[@]}"
-
-      - name: Wait for pods to settle into their failure states
-        run: sleep 45
+      # The cluster already exists (created by kind-action above), so the
+      # script runs without --create-cluster and leaves cluster lifecycle to
+      # the job. CRASHCAUSE_BIN skips the in-script build.
+      - name: Run e2e scenarios
+        env:
+          CRASHCAUSE_BIN: ${{ github.workspace }}/bin/crashcause
+          E2E_TIMEOUT: "180"
+        run: |
+          chmod +x hack/e2e.sh
+          ./hack/e2e.sh
 
       - name: Dump cluster state (debug)
         if: always()
         run: |
           echo "== kubectl get pods -A =="
           kubectl get pods -A || true
-          echo "== kubectl describe pods -A =="
-          kubectl describe pods -A || true
-
-      - name: Run crashcause inspect against demo pods (best effort)
-        run: |
-          echo "NOTE: 'inspect' currently returns 'not yet implemented' at this milestone."
-          echo "Cause-code assertions are intentionally NOT made here - they land in"
-          echo "milestone 3, once 'inspect' works end-to-end."
-
-          pods="$(kubectl get pods -A --no-headers -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name 2>/dev/null || true)"
-          if [ -z "$pods" ]; then
-            echo "No pods found to inspect - skipping"
-            exit 0
-          fi
-
-          echo "$pods" | while read -r ns name; do
-            [ -z "$name" ] && continue
-            echo "---- inspecting ${ns}/${name} ----"
-            ./bin/crashcause inspect "$name" -n "$ns" || echo "(expected at this milestone) inspect exited non-zero"
-          done
+          echo "== kubectl describe pods -n crashcause-demo =="
+          kubectl describe pods -n crashcause-demo || true
+          echo "== kubectl get events -n crashcause-demo =="
+          kubectl get events -n crashcause-demo --sort-by=.lastTimestamp || true
 
       - name: Delete kind cluster
         if: always()
-        run: kind delete cluster || true
+        run: kind delete cluster --name crashcause-demo || true

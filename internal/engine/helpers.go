@@ -371,16 +371,43 @@ func imagePullContext(in Inputs) (string, bool) {
 			strings.EqualFold(in.Waiting.Reason, "RegistryUnavailable") ||
 			strings.EqualFold(in.Waiting.Reason, "ErrImageNeverPull"))
 
-	// The event message is normally far richer than the waiting message.
+	// The event message is normally far richer than the waiting message —
+	// but one pull failure produces several events ("Failed to pull image
+	// ...: not found", "Error: ErrImagePull", "Error: ImagePullBackOff")
+	// that often share a one-second-granularity timestamp, so the sort
+	// order between them is arbitrary. Taking the first match would let a
+	// bare "Error: ErrImagePull" shadow the message that actually carries
+	// the auth/not-found detail; pick the most informative candidate.
+	var candidates []string
 	for _, e := range eventsByReason(in, "Failed", "FailedToPullImage", "ErrImagePull") {
 		if containsFold(e.Message, "pull") || containsFold(e.Message, "image") {
-			return e.Message, true
+			candidates = append(candidates, e.Message)
 		}
 	}
 	for _, e := range eventsByReason(in, "BackOff") {
 		if containsFold(e.Message, "image") || containsFold(e.Message, "pulling") {
-			return e.Message, true
+			candidates = append(candidates, e.Message)
 		}
+	}
+	if waitingPull && in.Waiting.Message != "" {
+		candidates = append(candidates, in.Waiting.Message)
+	}
+
+	best, bestScore := "", -1
+	for _, msg := range candidates {
+		score := 0
+		switch {
+		case reImagePullAuth.MatchString(msg) || reImagePullNotFound.MatchString(msg):
+			score = 2 // carries the signal the classification regexes key on
+		case containsFold(msg, "failed to pull"):
+			score = 1 // kubelet's detailed message, even without a known category
+		}
+		if score > bestScore || (score == bestScore && len(msg) > len(best)) {
+			best, bestScore = msg, score
+		}
+	}
+	if best != "" {
+		return best, true
 	}
 	if waitingPull {
 		return in.Waiting.Message, true

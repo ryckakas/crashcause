@@ -979,6 +979,29 @@ func TestHTImagePullContextAndClassification(t *testing.T) {
 		}
 	})
 
+	t.Run("informative message wins over tied bare ErrImagePull events", func(t *testing.T) {
+		// A single bad-tag pull yields several events with the same
+		// one-second timestamp; sorted order between them is arbitrary and
+		// "Error: ErrImagePull" sorts before "Failed to pull image ...".
+		// The detailed not-found message must still win.
+		in := baseInputs()
+		in.Waiting = WaitingState{Present: true, Reason: "ImagePullBackOff", Message: "Back-off pulling image \"nginx:doesnotexist\""}
+		in.Events = []Event{
+			warning("Failed", "Error: ErrImagePull", 3),
+			warning("Failed", "Failed to pull image \"nginx:doesnotexist\": rpc error: code = NotFound "+
+				"desc = failed to pull and unpack image \"docker.io/library/nginx:doesnotexist\": "+
+				"docker.io/library/nginx:doesnotexist: not found", 3),
+			warning("BackOff", "Back-off pulling image \"nginx:doesnotexist\"", 5),
+		}
+		category, msg, ok := imagePullClassification(in)
+		if !ok || category != "not_found" {
+			t.Fatalf("imagePullClassification() = (%q, %v), want (not_found, true); msg=%q", category, ok, msg)
+		}
+		if !strings.Contains(msg, "not found") {
+			t.Errorf("imagePullContext() picked %q, want the detailed not-found message", msg)
+		}
+	})
+
 	t.Run("falls back to waiting message when no useful event exists", func(t *testing.T) {
 		in := baseInputs()
 		in.Waiting = WaitingState{Present: true, Reason: "ImagePullBackOff", Message: "Back-off pulling image \"nginx:bogus\""}

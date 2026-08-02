@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go module and dependency pinning (`github.com/ryckakas/crashcause`, Go 1.23,
   toolchain go1.23.1).
 - Shared engine type contracts: `CauseCode` taxonomy, `Diagnosis`, and `Inputs` types.
-- Cobra CLI skeleton with `inspect` and `watch` commands (both not yet implemented).
+- Cobra CLI skeleton with `inspect` and `watch` commands.
 - Apache-2.0 license.
 - CI workflows: lint, test (with race detector and coverage), cross-build matrix,
   govulncheck, helm, and a best-effort kind e2e job.
@@ -39,6 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full project README: install paths (krew manifest and Helm), `inspect` and
   `watch` usage, sink documentation, the AI layer's privacy notice, and the
   severable-privileges security section.
+- `hack/e2e.sh`, a kind-based end-to-end harness: it applies every scenario
+  manifest in `examples/kind-demo/`, creates an additional healthy control
+  pod, bounded-polls each pod for its expected diagnosable state, and runs
+  `crashcause inspect --output json` against each one, asserting both the
+  expected cause code and exit code — including the healthy-control case,
+  where `diagnoses` must be empty and the exit code must be `2`. Both
+  `make e2e` and the CI `e2e-kind` job drive this script; it remains
+  best-effort (non-gating, `continue-on-error: true`) rather than a merge
+  blocker.
 
 ### Changed
 
@@ -47,3 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of installing something), a documented release-time rewrite
   contract, LICENSE included in the extracted files, and a description
   consistent with the README.
+- Replaced the milestone-1 placeholder e2e job/target with the real
+  `hack/e2e.sh` harness wired into `make e2e` and CI, and trued up the
+  README status block and the `examples/kind-demo/README.md` walkthrough to
+  match the now-implemented `inspect`/`watch` commands and completed Helm
+  chart.

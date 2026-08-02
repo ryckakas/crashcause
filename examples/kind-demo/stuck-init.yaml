@@ -12,7 +12,7 @@
 # internal/cli/inspect.go), so a real diagnosis requires the pod to have
 # been in Init: state for that long before `inspect` will confidently call
 # it "stuck" rather than "still legitimately initializing". For a fast demo
-# (once inspect is implemented, milestone 3+), pass a lower threshold, e.g.
+# pass a lower threshold, e.g.
 # `--init-stuck-threshold 30s`, to see the diagnosis immediately instead of
 # waiting 10 minutes.
 apiVersion: v1

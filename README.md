@@ -7,24 +7,23 @@ or `logs` output anywhere.
 ![Go 1.23+](https://img.shields.io/badge/go-1.23%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-> **Status: pre-v0.1.0, under active milestone-by-milestone development.**
+> **Status: feature-complete for v0.1.0, pre-first-release.**
 >
-> - `crashcause inspect` is implemented end-to-end: it talks to a real cluster, runs the
->   full rule engine, and prints a report in both human and `--output json` form. Every
->   cause code below is wired up.
-> - `crashcause watch` is **not yet wired up**. The underlying pieces it will use — the
->   classification engine, the stdout/Prometheus/Loki sinks, the AI provider clients — all
->   exist and are unit-tested in `internal/`, but the `watch` CLI command itself still
->   returns `"watch: not yet implemented"`. Everything in the "watch mode + sinks" section
->   below describes the target interface, not something you can run today.
-> - The Helm chart at `charts/crashcause/` is being written now; only `Chart.yaml` exists
->   as of this writing. The values shown in this README are the chart's intended shape.
+> - `crashcause inspect` and `crashcause watch` are both implemented end-to-end and
+>   unit-tested under `go test -race`: the full rule engine, human and `--output json`
+>   report formats, workload-keyed dedup, the stdout/Prometheus/Loki sinks, optional
+>   leader election, and the opt-in (off-by-default) AI layer.
+> - The Helm chart at `charts/crashcause/` is complete: Deployment, RBAC, Service,
+>   ServiceAccount, ServiceMonitor, NOTES.txt, and a chart README.
+> - A kind-based e2e harness (`hack/e2e.sh`) exercises every demo scenario in
+>   `examples/kind-demo/` against a live cluster and runs best-effort (non-gating) in CI.
 > - There is no GitHub Release yet, so there is no krew-index entry, no downloadable
 >   binary, and no chart repository to `helm repo add`. Build from source, or install the
->   kubectl plugin / Helm chart from a local checkout of this repository.
+>   kubectl plugin / Helm chart from a local checkout of this repository. The tool has not
+>   yet been exercised against real production clusters.
 >
-> Nothing above should be read as "you can run this in production" — track progress via
-> the milestones in [`CHANGELOG.md`](./CHANGELOG.md) and the CI badge above.
+> Track progress via the milestones in [`CHANGELOG.md`](./CHANGELOG.md) and the CI badge
+> above.
 
 ## What it is, and why
 
