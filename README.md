@@ -487,18 +487,6 @@ make fmt lint test race cover build e2e helm-lint check
 
 `make check` mirrors what CI runs — if it's green locally, CI should be green too.
 
-### Releasing
-
-Every merged PR adds its entries to the CHANGELOG's `[Unreleased]` section; releasing
-is then one click. Run the **Release prep** workflow (Actions tab) with the version,
-e.g. `0.1.2` — it cuts the CHANGELOG and opens a "Release v0.1.2" PR. Merging that PR
-tags the merge commit, and the tag drives everything else automatically: goreleaser
-(archives, checksums, SBOMs, container images), the Helm chart (version stamped from
-the tag), and the krew manifest release asset. One-time setup: a fine-grained PAT with
-Contents read/write and Pull requests read/write on this repo, saved as an Actions
-secret named `RELEASE_PAT` — required because bot-created PRs and tags made with the
-default token would not trigger CI or the release workflow.
-
 ## License
 
 Apache-2.0. See [LICENSE](./LICENSE).
