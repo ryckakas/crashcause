@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New cause code `security_context_violation` (the 18th): a
+  `CreateContainerConfigError` caused by a securityContext rejection —
+  `runAsNonRoot: true` against an image that runs as root, an image with a
+  non-numeric user, or an explicit `runAsUser: 0` — is now reported as its own
+  high-confidence cause instead of being folded into
+  `config_missing_reference` (#17).
+- `inspect` against an unreachable cluster (expired or stale credentials, a
+  missing kubeconfig exec plugin, DNS or connection failures) now prints a
+  one-line "cannot reach or authenticate to cluster <server>" hint naming the
+  API server and pointing at the kubeconfig context, instead of leaking a raw
+  client-go error chain. The exit code stays 1 (#17).
+
+### Fixed
+
+- A pod in `CreateContainerConfigError` whose Failed event message merely
+  contained the word "image" ("container has runAsNonRoot and image will run
+  as root") was misclassified as `image_pull_other` — a verdict refuted by the
+  successful `Pulled` event in the same event list. The `image_pull_*` rules
+  now stand down whenever the container's waiting reason names a non-pull
+  failure family; `SignatureValidationFailed` was added to the pull-reason set
+  so signature-verification failures keep classifying as pull failures (#17).
+- `config_missing_reference`'s fallback explanation no longer asserts that a
+  ConfigMap/Secret reference is missing when the kubelet message was not
+  parseable as one; it now points at the quoted kubelet message for the actual
+  rejection.
+
 ## [0.1.0] - 2026-08-03
 
 First public release.

@@ -85,6 +85,7 @@ func runInspect(cmd *cobra.Command, args []string, opts *inspectOptions) error {
 		Output:             opts.output,
 		Verbose:            opts.verbose,
 		Summarizer:         summarizer,
+		Server:             restConfig.Host,
 		Out:                cmd.OutOrStdout(),
 		ErrOut:             cmd.ErrOrStderr(),
 	})

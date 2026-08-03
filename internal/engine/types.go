@@ -18,23 +18,24 @@ type CauseCode string
 // CauseCode values enumerated by the engine, covering every crash cause the
 // classifier can currently detect (see AllCauses for the exhaustive list).
 const (
-	CauseOOMKilled            CauseCode = "oom_killed"
-	CauseSigkillUnattributed  CauseCode = "sigkill_unattributed"
-	CauseEvicted              CauseCode = "evicted"
-	CauseProbeLiveness        CauseCode = "probe_liveness_failure"
-	CauseProbeStartup         CauseCode = "probe_startup_failure"
-	CauseImagePullAuth        CauseCode = "image_pull_auth"
-	CauseImagePullNotFound    CauseCode = "image_pull_not_found"
-	CauseImagePullOther       CauseCode = "image_pull_other"
-	CauseConfigMissingRef     CauseCode = "config_missing_reference"
-	CauseVolumeMountFailure   CauseCode = "volume_mount_failure"
-	CauseInitContainerFailure CauseCode = "init_container_failure"
-	CauseInitContainerStuck   CauseCode = "init_container_stuck"
-	CauseUnschedulable        CauseCode = "unschedulable"
-	CauseAppExitNonzero       CauseCode = "app_exit_nonzero"
-	CauseSigkillAfterGrace    CauseCode = "sigkill_after_grace"
-	CauseCompletedRestartLoop CauseCode = "completed_restart_loop"
-	CauseUnknown              CauseCode = "unknown"
+	CauseOOMKilled                CauseCode = "oom_killed"
+	CauseSigkillUnattributed      CauseCode = "sigkill_unattributed"
+	CauseEvicted                  CauseCode = "evicted"
+	CauseProbeLiveness            CauseCode = "probe_liveness_failure"
+	CauseProbeStartup             CauseCode = "probe_startup_failure"
+	CauseImagePullAuth            CauseCode = "image_pull_auth"
+	CauseImagePullNotFound        CauseCode = "image_pull_not_found"
+	CauseImagePullOther           CauseCode = "image_pull_other"
+	CauseSecurityContextViolation CauseCode = "security_context_violation"
+	CauseConfigMissingRef         CauseCode = "config_missing_reference"
+	CauseVolumeMountFailure       CauseCode = "volume_mount_failure"
+	CauseInitContainerFailure     CauseCode = "init_container_failure"
+	CauseInitContainerStuck       CauseCode = "init_container_stuck"
+	CauseUnschedulable            CauseCode = "unschedulable"
+	CauseAppExitNonzero           CauseCode = "app_exit_nonzero"
+	CauseSigkillAfterGrace        CauseCode = "sigkill_after_grace"
+	CauseCompletedRestartLoop     CauseCode = "completed_restart_loop"
+	CauseUnknown                  CauseCode = "unknown"
 )
 
 // AllCauses lists every CauseCode (for exhaustiveness checks and metric docs).
@@ -48,6 +49,7 @@ func AllCauses() []CauseCode {
 		CauseImagePullAuth,
 		CauseImagePullNotFound,
 		CauseImagePullOther,
+		CauseSecurityContextViolation,
 		CauseConfigMissingRef,
 		CauseVolumeMountFailure,
 		CauseInitContainerFailure,
