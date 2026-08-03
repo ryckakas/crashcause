@@ -23,20 +23,32 @@
 #   3. every platforms[].sha256  -> 64 hex chars, taken from the release's
 #                                   crashcause_<version>_checksums.txt
 #
-# The placeholder sha256 values below are 64 zeros, which is a well-formed
-# but never-matching digest: an accidental install from an un-rewritten
-# manifest FAILS the checksum check rather than silently installing
-# something. Do not "fix" them by shortening or removing them.
+# In the placeholder form of this file those sha256 values are 64 zeros: a
+# well-formed but never-matching digest, so an accidental install from an
+# un-rewritten manifest FAILS the checksum check rather than silently
+# installing something. Do not "fix" them by shortening or removing them.
+# The copy on the default branch is the rewritten form, carrying the real
+# digests of the newest release.
 #
-# Rewrite recipe (release job, given TAG=v0.1.0 and the downloaded
-# checksums.txt):
+# Rewrite recipe, starting from the placeholder form of this file (i.e. the
+# previous release's manifest reverted, or `git show <prev-tag>:` of it), given
+# TAG=v0.1.0 and the downloaded checksums.txt.
+#
+# Every pattern is ANCHORED to its leading indentation on purpose: the
+# unanchored forms (`s/version: v0.0.0/`, `s|/download/v0.0.0/|`) also match
+# this very comment block, so running them rewrites the recipe itself and the
+# next release starts from mangled instructions. Comment lines begin with `#`,
+# so anchoring on the YAML indent can never hit them.
 #
 #   VERSION="${TAG#v}"
-#   sed -i "s/version: v0.0.0/version: ${TAG}/" deploy/krew/crashcause.yaml
-#   sed -i "s|/download/v0.0.0/|/download/${TAG}/|g" deploy/krew/crashcause.yaml
-#   sed -i "s/crashcause_0.0.0_/crashcause_${VERSION}_/g" deploy/krew/crashcause.yaml
-#   # then, per platform, replace the zeros with the matching digest from
-#   # crashcause_${VERSION}_checksums.txt
+#   sed -i "s|^  version: v0\.0\.0|  version: ${TAG}|" deploy/krew/crashcause.yaml
+#   sed -i "s|^\(      uri: .*\)/download/v0\.0\.0/|\1/download/${TAG}/|" deploy/krew/crashcause.yaml
+#   sed -i "s|^\(      uri: .*\)crashcause_0\.0\.0_|\1crashcause_${VERSION}_|" deploy/krew/crashcause.yaml
+#   # then, per platform, replace the zeros on the `sha256:` line following
+#   # each `uri:` with that archive's digest from
+#   # crashcause_${VERSION}_checksums.txt - match on the archive FILENAME, not
+#   # on ordering, so a reordered platform list cannot pair a digest with the
+#   # wrong platform.
 #   gh release upload "${TAG}" deploy/krew/crashcause.yaml
 #
 # The rewritten manifest is committed back to main (so the checked-out copy
@@ -54,7 +66,7 @@ kind: Plugin
 metadata:
   name: crashcause
 spec:
-  version: v0.0.0 # placeholder - rewritten to the real tag at release time
+  version: v0.1.0
   homepage: https://github.com/ryckakas/crashcause
   shortDescription: Explain why a Kubernetes pod crashed
   description: |
@@ -101,9 +113,8 @@ spec:
         matchLabels:
           os: darwin
           arch: amd64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_amd64.tar.gz
-      # placeholder digest - replaced from checksums.txt at release time
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_darwin_amd64.tar.gz
+      sha256: "fe8bc0f3e9076bfcdc364bf464e04b90377030d34a8b53acf6d5df01f51debd4"
       bin: crashcause
       files:
         - from: crashcause
@@ -115,9 +126,8 @@ spec:
         matchLabels:
           os: darwin
           arch: arm64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_arm64.tar.gz
-      # placeholder digest - replaced from checksums.txt at release time
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_darwin_arm64.tar.gz
+      sha256: "6232dd5adc3ff57608db16c55f9ae323513500a1b5b0f7eb23842d96919b750e"
       bin: crashcause
       files:
         - from: crashcause
@@ -129,9 +139,8 @@ spec:
         matchLabels:
           os: linux
           arch: amd64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_amd64.tar.gz
-      # placeholder digest - replaced from checksums.txt at release time
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_linux_amd64.tar.gz
+      sha256: "49279f4667bd5325da9804e2469f9ad2a298093925512fb1862447116d98aeb5"
       bin: crashcause
       files:
         - from: crashcause
@@ -143,9 +152,8 @@ spec:
         matchLabels:
           os: linux
           arch: arm64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_arm64.tar.gz
-      # placeholder digest - replaced from checksums.txt at release time
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_linux_arm64.tar.gz
+      sha256: "c77a7e47049d10ee1da0b39786b66fa31b059d1552162553bbdd80990342109c"
       bin: crashcause
       files:
         - from: crashcause
