@@ -7,24 +7,13 @@ or `logs` output anywhere.
 ![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-> **Status: pre-1.0.**
->
-> - `crashcause inspect` and `crashcause watch` are both implemented end-to-end and
->   unit-tested under `go test -race`: the full rule engine, human and `--output json`
->   report formats, workload-keyed dedup, the stdout/Prometheus/Loki sinks, optional
->   leader election, and the opt-in (off-by-default) AI layer.
-> - The Helm chart at `charts/crashcause/` is complete: Deployment, RBAC, Service,
->   ServiceAccount, ServiceMonitor, NOTES.txt, and a chart README.
-> - A kind-based e2e harness (`hack/e2e.sh`) exercises every demo scenario in
->   `examples/kind-demo/` against a live cluster and runs best-effort (non-gating) in CI.
-> - Being pre-1.0, the CLI flags and chart values may still change between minor
->   versions; the 18 cause codes are the stable part of the contract. The tool has not
->   yet been exercised against real production clusters at scale.
-> - Not yet in the [krew index](https://github.com/kubernetes-sigs/krew-index), so
->   `kubectl krew install crashcause` does not work yet — install from the released
->   plugin manifest as shown under [Install](#install).
->
-> See [`CHANGELOG.md`](./CHANGELOG.md) for what shipped.
+> **Status: pre-1.0.** CLI flags and chart values may still change between minor
+> versions; the 18 cause codes are the stable part of the contract. The tool has not yet
+> been exercised against real production clusters at scale. Not yet in the
+> [krew index](https://github.com/kubernetes-sigs/krew-index), so
+> `kubectl krew install crashcause` does not work yet — install from the released plugin
+> manifest as shown under [Install](#install). See [`CHANGELOG.md`](./CHANGELOG.md) for
+> what shipped.
 
 ## What it is, and why
 
@@ -48,9 +37,12 @@ Two things differentiate it from "paste your logs into a UI" tools:
 
 ## Cause codes
 
-Every diagnosis carries one of these 18 stable, snake_case cause codes (`internal/engine/types.go`).
-They are part of the tool's external contract: once released, a code's meaning does not
-change.
+Every diagnosis carries one of 18 stable, snake_case cause codes
+(`internal/engine/types.go`). They are part of the tool's external contract: once
+released, a code's meaning does not change.
+
+<details>
+<summary><b>All 18 cause codes (the stable contract)</b></summary>
 
 | Cause code | Meaning |
 |---|---|
@@ -80,6 +72,8 @@ deliberately **not reported at all** — otherwise every deploy would look like 
 crash findings. Exit 143 *outside* any deletion context (something inside the container
 sent itself a `SIGTERM`) is folded into `app_exit_nonzero` evidence at low confidence
 instead of being invented as its own cause.
+
+</details>
 
 ## 5-minute demo
 
@@ -151,8 +145,14 @@ helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
 
 Helm resolves the newest published chart version; add `--version X.Y.Z` to pin a
 specific release. `helm show values oci://ghcr.io/ryckakas/charts/crashcause` prints the
-full default values. To install from a checkout instead — for local development, or to
-try chart changes before they are released:
+full default values, and [`charts/crashcause/README.md`](./charts/crashcause/README.md)
+is the full values reference.
+
+<details>
+<summary><b>Example values files and notable keys</b></summary>
+
+To install from a checkout instead — for local development, or to try chart changes
+before they are released:
 
 ```sh
 helm install crashcause ./charts/crashcause -n crashcause --create-namespace \
@@ -207,21 +207,31 @@ Notable `values.yaml` keys: `watch.namespaces`, `watch.selector`, `watch.reemitI
 `metrics.enabled`, `metrics.addr`, `serviceMonitor.enabled`, `serviceMonitor.labels`,
 `serviceMonitor.skipCapabilityCheck`, `loki.url`, `loki.existingSecret`, `ai.enabled`,
 `ai.provider`, `ai.url`, `ai.namespaces` (empty = nothing summarized, `["*"]` = whole
-cluster — see "AI layer" below), `ai.redact`, `ai.redactIPs`, `ai.existingSecret`,
-`ai.secretKey`, `leaderElection.enabled`, `replicas`. `serviceMonitor.skipCapabilityCheck`
-(default `false`) lets `helm template` render the `ServiceMonitor` without a live cluster
-connection — useful for GitOps pipelines that template offline, where the chart can't
-check whether the `monitoring.coreos.com/v1` CRD is actually installed; without it (or a
-real CRD check passing), enabling `serviceMonitor` against an offline template run fails
-loudly rather than rendering a resource the cluster can't accept. See
-[`charts/crashcause/README.md`](./charts/crashcause/README.md) for the full reference, and
-the "AI layer" and "Security & RBAC" sections below for what those keys actually control.
+cluster — see [AI layer](#ai-layer-optional-default-off) below), `ai.redact`,
+`ai.redactIPs`, `ai.existingSecret`, `ai.secretKey`, `leaderElection.enabled`,
+`replicas`. `serviceMonitor.skipCapabilityCheck` (default `false`) lets `helm template`
+render the `ServiceMonitor` without a live cluster connection — useful for GitOps
+pipelines that template offline, where the chart can't check whether the
+`monitoring.coreos.com/v1` CRD is actually installed; without it (or a real CRD check
+passing), enabling `serviceMonitor` against an offline template run fails loudly rather
+than rendering a resource the cluster can't accept. See
+[`charts/crashcause/README.md`](./charts/crashcause/README.md) for the full reference,
+and the [AI layer](#ai-layer-optional-default-off) and
+[Security & RBAC](#security--rbac) sections below for what those keys actually control.
+
+</details>
 
 ## `inspect` usage
 
 ```sh
 crashcause inspect <pod> [flags]
 ```
+
+Exit codes: `0` diagnosed, `2` pod exists but isn't crashing (nothing to diagnose), `1`
+error. See the [Exit codes](#exit-codes) section for the full table.
+
+<details>
+<summary><b><code>inspect</code> flags</b></summary>
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -230,12 +240,11 @@ crashcause inspect <pod> [flags]
 | `--previous-lines` | `60` | Lines to fetch from the previous container's log tail. |
 | `--init-stuck-threshold` | `10m` | How long an init container may run before it's reported as `init_container_stuck`. |
 | `--verbose` | `false` | Report every rule that matched, not just the primary diagnosis. |
-| `--ai` | `false` | Enable the optional AI summary (see below). |
+| `--ai` | `false` | Enable the optional AI summary (see [AI layer](#ai-layer-optional-default-off)). |
 | `-n, --namespace`, `--kubeconfig`, `--context`, ... | — | Standard `k8s.io/cli-runtime` kubeconfig flags (krew-compatible). |
 | `--log-level` (root, persistent) | `info` | `debug\|info\|warn\|error`. |
 
-Exit codes: `0` diagnosed, `2` pod exists but isn't crashing (nothing to diagnose), `1`
-error. See the [Exit codes](#exit-codes) section for the full table.
+</details>
 
 The human report is compact and evidence-first: cause, confidence, a plain-language
 explanation, evidence bullets, and suggested next steps. **The output below is an
@@ -256,6 +265,9 @@ crashcause-demo/oom-demo container app — oom_killed (high confidence)
     - Raise the memory limit or reduce the workload's memory footprint
     - Check node MemoryPressure conditions if this recurs across pods
 ```
+
+<details>
+<summary><b><code>--output json</code> shape</b></summary>
 
 `--output json` emits one `Report` document per invocation, with the field names as they
 appear in `internal/engine/types.go`'s `Diagnosis`:
@@ -294,11 +306,29 @@ appear in `internal/engine/types.go`'s `Diagnosis`:
 well-formed document with `"diagnoses": []` in JSON mode, so `jq '.diagnoses | length'`
 never breaks on a healthy pod.
 
+</details>
+
 ## `watch` mode + sinks
 
 ```sh
 crashcause watch [flags]
 ```
+
+Every diagnosis goes to stdout as one JSON object per line — always on, so any team
+already scraping container stdout (promtail, vector, fluent-bit) gets structured
+crash-cause data with no direct-push configuration at all. `--metrics-addr` adds a
+Prometheus endpoint with exactly two intentionally low-cardinality metrics
+(`crashcause_diagnoses_total{namespace, owner_kind, owner_name, cause}` and
+`crashcause_log_fetches_skipped_total`), and `--loki-url` adds a direct Loki push.
+Emission for the log-style sinks is deduplicated per workload; the Prometheus counter
+increments on every observed crash regardless. The full sink reference — cardinality
+discipline, Loki auth and backpressure, and the dedup model — lives in
+[`docs/sinks.md`](./docs/sinks.md). Example Grafana dashboard and Prometheus alert
+rules: [`examples/grafana-dashboard.json`](./examples/grafana-dashboard.json),
+[`examples/prometheus-alerts.yaml`](./examples/prometheus-alerts.yaml).
+
+<details>
+<summary><b><code>watch</code> flags</b></summary>
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -318,115 +348,34 @@ crashcause watch [flags]
 | `--leader-election-id` | `crashcause` | Name of the leader-election Lease. |
 | `--health-addr` | `:8081` | Address serving `/healthz` and `/readyz`. |
 | `--ai-namespaces` | (empty: AI off everywhere) | Namespace allowlist for AI summarization. Empty keeps AI inert in every namespace, even with `--ai` set; pass `"*"` to opt the whole cluster in. |
-| `--ai`, `--ai-provider`, `--ai-url`, `--ai-model`, `--ai-timeout`, `--ai-redact`, `--ai-redact-ips`, `--ai-redact-extra` | see below | Shared AI flags, identical to `inspect`. |
+| `--ai`, `--ai-provider`, `--ai-url`, `--ai-model`, `--ai-timeout`, `--ai-redact`, `--ai-redact-ips`, `--ai-redact-extra` | see [`docs/ai-layer.md`](./docs/ai-layer.md) | Shared AI flags, identical to `inspect`. |
 
-### stdout (default, always on)
-
-One JSON object per line. This sink alone is worth documenting loudly: any team already
-scraping container stdout — promtail, vector, or fluent-bit shipping to Loki, CloudWatch,
-or anything else — gets structured, Loki-shaped crash-cause data for free, with **no
-direct-push configuration at all**. If you already have a log pipeline, you may not need
-`--loki-url` or a Prometheus scrape target to get value out of `watch`.
-
-### Prometheus (`--metrics-addr :9090`)
-
-Exactly two metrics, both intentionally low-cardinality:
-
-| Metric | Type | Labels |
-|---|---|---|
-| `crashcause_diagnoses_total` | counter | `namespace`, `owner_kind`, `owner_name`, `cause` |
-| `crashcause_log_fetches_skipped_total` | counter | (none) |
-
-Cardinality discipline: label values come only from the fixed `CauseCode` set plus a
-normalized workload identity. Never a pod name, never explanation text, never AI output.
-`confidence` is deliberately **not** a label (a confidence shift for the same cause would
-otherwise split one logical series in two) — it lives only in the stdout/Loki payloads.
-`crashcause_diagnoses_total` increments on **every** observed crash, independent of the
-dedup model below; series for a workload are dropped from the registry when its dedup key
-expires or the workload is deleted, so `/metrics` stays bounded over weeks of churn.
-
-Example Grafana dashboard and Prometheus alert rules: [`examples/grafana-dashboard.json`](./examples/grafana-dashboard.json),
-[`examples/prometheus-alerts.yaml`](./examples/prometheus-alerts.yaml).
-
-### Loki push (`--loki-url ...`)
-
-Pushes the full `Diagnosis` (including `ai_summary`, if any) as one JSON log line. Stream
-labels are `{app="crashcause", namespace, cause}` only — same cardinality discipline as
-Prometheus. Auth via `LOKI_USERNAME`/`LOKI_PASSWORD` or `LOKI_BEARER_TOKEN` environment
-variables. On backpressure, pushes are dropped with a counter rather than blocking the
-watch loop — a slow or unavailable Loki must never stall crash classification.
-
-### Dedup model
-
-Emission for the log-style sinks (stdout, Loki) is keyed on `(namespace, owner, container,
-cause)` — deliberately **not** pod name and **not** restart count, so a ReplicaSet
-replacing pods, or a container stuck in a backoff loop, doesn't spam a log line every few
-seconds. A key re-emits on first occurrence, on a cause change for the same workload, and
-at most once per `--reemit-interval` while the condition persists. The Prometheus counter
-ignores this entirely and increments on every observed crash.
-
-Dedup state is an in-memory cache with TTL eviction (`--dedup-ttl`) — there is no
-persistence. After a controller restart, every key re-emits once, since the controller has
-no memory of what it already reported. This is accepted, documented behavior, not a bug.
+</details>
 
 ## AI layer (optional, default off)
 
-`--ai` / `ai.enabled` turn on an optional layer that sends the log tail and diagnosis
-evidence to an LLM for a short (2-4 sentence) natural-language summary — useful mainly
-when the rule engine lands on `app_exit_nonzero` or `unknown`, where the "cause" is an
-application bug the rules can't interpret further. It is **BYO-key**: you bring your own
-provider API key, the tool ships every provider client, and you implement nothing.
-
-Providers: `anthropic`, `openai`, `ollama` (`--ai-provider`). **`ollama` is the recommended
-path for privacy-sensitive environments** — it's keyless and self-hosted, so nothing
-leaves your machine or cluster. Each provider has a sensible default model
-(`claude-haiku-4-5`, `gpt-4o-mini`, `llama3.1`); override it with `--ai-model`, e.g.
-`--ai-model llama3.2:3b` to run a smaller local model. Each summary is bounded by
-`--ai-timeout` (default 15s) — ample for a hosted API, but raise it for a self-hosted
-model that has to load several GB of weights on its first call. The API key, when one is needed, comes **only** from the
-`CRASHCAUSE_AI_API_KEY` environment variable — never a command-line flag (flags leak via
-`ps`), and never logged. In Helm, the key is mounted from a Kubernetes Secret you provide
-(`ai.existingSecret` + `ai.secretKey`, default key name `api-key`) into that environment
-variable; the chart never creates the Secret and never accepts a plaintext key in
-`values.yaml`.
-
-**What is sent** (only if `--ai` is enabled): the already-truncated log tail, the cause's
-evidence strings, and the container image name.
-**What is never sent**: environment variables, Secrets, the full pod spec, or node info.
-
-> Redaction (`--ai-redact`, default on) is **best-effort pattern matching, not a
-> guarantee**. Do not enable AI on workloads whose logs may contain secrets you cannot
-> afford to send to a third-party provider. The per-namespace allowlist
-> (`--ai-namespaces` / `ai.namespaces`) is the primary control; redaction is
-> defense-in-depth, not the safety mechanism itself. This notice is also printed to
-> stderr the first time `--ai` is used in a given invocation.
-
-The allowlist is **fail-closed**, which is what makes it the primary control rather than a
-convenience filter: with `--ai` set but `--ai-namespaces` left empty (or `ai.namespaces:
-[]` in the chart), AI summarization is inert in every namespace — nothing is sent
-anywhere. You must explicitly pass `--ai-namespaces "*"` (or set `ai.namespaces: ["*"]`)
-to opt the whole cluster in; there is no "on by default once `--ai`/`ai.enabled` is set"
-behavior to accidentally trigger.
-
-What redaction covers: bearer/api-key/password/token `key=value` pairs, AWS-style access
-key IDs, JWT-shaped strings, and credentials embedded in a URL (`://user:pass@host`
-becomes `://***@host` — the password is scrubbed, but **host and port are deliberately
-kept**, because they're diagnosis, not secret). What it deliberately does not cover by
-default: bare IP addresses — "connection refused to 10.2.3.4:5432" is often *the*
-diagnostic fact, so IPs survive unless you opt in with `--ai-redact-ips`.
-`--ai-redact-extra <regex-file>` adds your own organization-specific patterns (one regex
-per line, `#`-comments allowed). The exact built-in pattern list is published in code
-(`internal/ai/redact.go`) rather than kept secret, on the theory that auditability beats
-false assurance.
-
-AI failures never fail a diagnosis: on a provider error or timeout you get the rules-only
-result plus a single one-line notice on stderr, not a hard failure. The Prometheus sink
-ignores AI output entirely — `ai_summary` never becomes a label or influences a metric.
+`--ai` / `ai.enabled` turn on an optional layer that sends the (already-truncated) log
+tail and diagnosis evidence to an LLM for a short natural-language summary — useful
+mainly when the rule engine lands on `app_exit_nonzero` or `unknown`, where the "cause"
+is an application bug the rules can't interpret further. Three properties are
+load-bearing: it is **off by default**; the per-namespace allowlist (`--ai-namespaces` /
+`ai.namespaces`) is **fail-closed** — with `--ai` set but the allowlist empty, nothing is
+sent anywhere; and redaction (`--ai-redact`, default on) is **best-effort pattern
+matching, not a guarantee** — do not enable AI on workloads whose logs may contain
+secrets you cannot afford to send to a third-party provider. Providers are `anthropic`,
+`openai`, and keyless self-hosted `ollama` (the recommended path for privacy-sensitive
+environments). Key handling, exactly what is and is never sent, redaction coverage, and
+failure behavior: [`docs/ai-layer.md`](./docs/ai-layer.md).
 
 ## Security & RBAC
 
 Every privilege `crashcause` asks for is individually severable — you can turn each one
-off and see, precisely, what capability you lose.
+off and see, precisely, what capability you lose. `crashcause inspect` needs none of
+this: it runs with the invoking user's own kubeconfig credentials against a single pod,
+so the RBAC discussion applies only to `watch`.
+
+<details>
+<summary><b>Permission-by-permission table</b></summary>
 
 | Permission | Why it's needed | How to remove it / what degrades |
 |---|---|---|
@@ -447,8 +396,7 @@ cannot turn the controller into an unintentional API-server DoS. Fetches beyond 
 skipped, counted in `crashcause_log_fetches_skipped_total`, and diagnosis proceeds without
 log evidence rather than blocking or failing.
 
-`crashcause inspect` needs none of this: it runs with the invoking user's own kubeconfig
-credentials against a single pod, so the RBAC discussion above applies only to `watch`.
+</details>
 
 Full permission-by-permission reference: [`charts/crashcause/README.md`](./charts/crashcause/README.md).
 
