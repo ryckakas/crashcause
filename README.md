@@ -18,7 +18,7 @@ or `logs` output anywhere.
 > - A kind-based e2e harness (`hack/e2e.sh`) exercises every demo scenario in
 >   `examples/kind-demo/` against a live cluster and runs best-effort (non-gating) in CI.
 > - Being pre-1.0, the CLI flags and chart values may still change between minor
->   versions; the 17 cause codes are the stable part of the contract. The tool has not
+>   versions; the 18 cause codes are the stable part of the contract. The tool has not
 >   yet been exercised against real production clusters at scale.
 > - Not yet in the [krew index](https://github.com/kubernetes-sigs/krew-index), so
 >   `kubectl krew install crashcause` does not work yet — install from the released
@@ -48,7 +48,7 @@ Two things differentiate it from "paste your logs into a UI" tools:
 
 ## Cause codes
 
-Every diagnosis carries one of these 17 stable, snake_case cause codes (`internal/engine/types.go`).
+Every diagnosis carries one of these 18 stable, snake_case cause codes (`internal/engine/types.go`).
 They are part of the tool's external contract: once released, a code's meaning does not
 change.
 
@@ -62,7 +62,8 @@ change.
 | `image_pull_auth` | `ErrImagePull`/`ImagePullBackOff` with a message matching authorization failure (401/403, "pull access denied"). |
 | `image_pull_not_found` | Image pull failure with a message matching "not found" / "manifest unknown". |
 | `image_pull_other` | Any other pull failure: timeout, TLS error, registry quota, etc. |
-| `config_missing_reference` | `CreateContainerConfigError` — a referenced ConfigMap/Secret/key doesn't exist; the message identifies which one. |
+| `security_context_violation` | `CreateContainerConfigError` where the kubelet message shows a securityContext rejection: `runAsNonRoot: true` against an image that runs as root (or declares a non-numeric user). The image pulled fine — the container was refused by a pre-start config check and never started. |
+| `config_missing_reference` | `CreateContainerConfigError` — a referenced ConfigMap/Secret/key doesn't exist; the message identifies which one. securityContext rejections are reported as `security_context_violation`, not this code. |
 | `volume_mount_failure` | `FailedMount` / `FailedAttachVolume` events. |
 | `init_container_failure` | An init container terminated non-zero; the failure is re-classified using only init-applicable rules. |
 | `init_container_stuck` | An init container has been `Running` for longer than `--init-stuck-threshold` (default 10m) without completing, or `activeDeadlineSeconds` was exceeded. Not a crash — a pod stuck at `Init:N/M`. |

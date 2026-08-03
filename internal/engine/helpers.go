@@ -366,6 +366,11 @@ var (
 	reImagePullNotFound = regexp.MustCompile(
 		`(?i)(not found|manifest unknown|does not exist|no such host.*manifest)`)
 
+	// The kubelet's verifyRunAsNonRoot rejections plus the runAsUser policy
+	// check — deliberately tight so generic "permission denied" never matches.
+	reSecurityContextViolation = regexp.MustCompile(
+		`(?i)(container has runAsNonRoot|runAsUser breaks non-root policy)`)
+
 	reSecretOrConfigMap = regexp.MustCompile(`(?i)\b(secrets?|config ?maps?)\s+"([^"]+)"\s+not found`)
 	reMissingKey        = regexp.MustCompile(`(?i)couldn't find key\s+([^\s"]+)\s+in\s+(Secret|ConfigMap)\s+([^\s",]+)`)
 	reNonExistentKey    = regexp.MustCompile(`(?i)references non-existent (secret|config ?map) key:?\s*([^\s",]+)`)
@@ -393,7 +398,20 @@ func imagePullContext(in Inputs) (string, bool) {
 			strings.EqualFold(in.Waiting.Reason, "ImagePullBackOff") ||
 			strings.EqualFold(in.Waiting.Reason, "ImageInspectError") ||
 			strings.EqualFold(in.Waiting.Reason, "RegistryUnavailable") ||
+			strings.EqualFold(in.Waiting.Reason, "SignatureValidationFailed") ||
 			strings.EqualFold(in.Waiting.Reason, "ErrImageNeverPull"))
+
+	// A failure-family waiting reason outside the pull set
+	// (CreateContainerConfigError, CrashLoopBackOff, ...) positively identifies
+	// a NON-pull failure: the kubelet got past pulling and failed later. Event
+	// scavenging below must not run then — a generic Failed event whose message
+	// merely contains the word "image" ("container has runAsNonRoot and image
+	// will run as root") would arm the pull family (issue #17). Neutral reasons
+	// (ContainerCreating, PodInitializing) carry no such signal, so they still
+	// fall through to the events.
+	if in.Waiting.Present && !waitingPull && isProblemWaitingReason(in.Waiting.Reason) {
+		return "", false
+	}
 
 	// The event message is normally far richer than the waiting message —
 	// but one pull failure produces several events ("Failed to pull image

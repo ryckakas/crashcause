@@ -517,6 +517,23 @@ func TestRtImagePullFromWaitingMessageOnly(t *testing.T) {
 	}
 }
 
+// SignatureValidationFailed (cri-api ErrSignatureValidationFailed) is a
+// genuine pull-failure waiting reason; the non-pull-reason gate added for
+// issue #17 must not suppress it.
+func TestRtImagePullSignatureValidationFailedReason(t *testing.T) {
+	in := baseInputs()
+	in.PodPhase = "Pending"
+	in.Image = "app:1.0.0"
+	in.Waiting = WaitingState{
+		Present: true,
+		Reason:  "SignatureValidationFailed",
+		Message: `Failed to pull image "app:1.0.0": image signature validation failed`,
+	}
+
+	got := Classify(in)
+	rtAssertOnlyImagePull(t, got, CauseImagePullOther)
+}
+
 // ---------------------------------------------------------------------------
 // volume_mount_failure
 // ---------------------------------------------------------------------------

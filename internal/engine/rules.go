@@ -643,7 +643,80 @@ func imagePullOtherRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 9. config_missing_reference
+// 9. security_context_violation
+// ---------------------------------------------------------------------------
+
+// securityContextViolationContext reports whether the container-config
+// rejection is a securityContext violation rather than a missing reference.
+func securityContextViolationContext(in Inputs) (string, bool) {
+	msg, ok := configErrorContext(in)
+	if !ok || !reSecurityContextViolation.MatchString(msg) {
+		return "", false
+	}
+	return msg, true
+}
+
+func securityContextViolationRule() Rule {
+	return Rule{
+		Cause:     CauseSecurityContextViolation,
+		AppliesTo: allKinds(),
+		Match: func(in Inputs) *Diagnosis {
+			msg, ok := securityContextViolationContext(in)
+			if !ok {
+				return nil
+			}
+			d := newDiagnosis(in, CauseSecurityContextViolation, ConfidenceHigh)
+			switch {
+			case containsFold(msg, "non-numeric user"):
+				d.Explanation = fmt.Sprintf(
+					"The kubelet refused to create %s: the securityContext requires runAsNonRoot, but the image declares "+
+						"a non-numeric user, so the kubelet cannot verify it is non-root. The image itself was pulled "+
+						"fine - the container was rejected by a pre-start configuration check and never started.",
+					containerRef(in))
+			case containsFold(msg, "runAsUser breaks"):
+				d.Explanation = fmt.Sprintf(
+					"The kubelet refused to create %s: the securityContext requires runAsNonRoot, but it also sets "+
+						"runAsUser to root (UID 0), so the pod spec contradicts itself. The image itself was pulled "+
+						"fine - the container was rejected by a pre-start configuration check and never started.",
+					containerRef(in))
+			default:
+				d.Explanation = fmt.Sprintf(
+					"The kubelet refused to create %s: the securityContext requires runAsNonRoot, but the image is "+
+						"configured to run as root. The image itself was pulled fine - the container was rejected by a "+
+						"pre-start configuration check and never started.",
+					containerRef(in))
+			}
+			if in.Waiting.Present && in.Waiting.Reason != "" {
+				appendEvidence(d, "waiting reason: "+in.Waiting.Reason)
+			}
+			if m := truncateMessage(msg); m != "" {
+				appendEvidence(d, "kubelet message: "+m)
+			}
+			if in.Image != "" {
+				appendEvidence(d, "image: "+in.Image)
+			}
+			for _, e := range eventsByReason(in, "Failed") {
+				appendEvidence(d, describeEvent(e))
+			}
+			appendEvidence(d, restartEvidence(in)...)
+			appendSteps(d,
+				"Set securityContext.runAsUser to a non-zero UID that exists in the image "+
+					"(the container-level securityContext overrides the pod-level one)",
+				"Or rebuild the image to declare a NUMERIC non-root user (USER 101, not USER nginx): "+
+					"the kubelet can only verify non-root from a UID",
+				"Or drop runAsNonRoot: true if this workload genuinely needs to run as root",
+			)
+			if in.Image != "" {
+				appendSteps(d, "docker image inspect "+in.Image+" --format '{{.Config.User}}'    # what user does the image declare?")
+			}
+			appendSteps(d, describeCommand(in)+"    # the Events section repeats the kubelet's rejection message")
+			return d
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 10. config_missing_reference
 // ---------------------------------------------------------------------------
 
 func configMissingRefRule() Rule {
@@ -653,6 +726,11 @@ func configMissingRefRule() Rule {
 		Match: func(in Inputs) *Diagnosis {
 			msg, ok := configErrorContext(in)
 			if !ok {
+				return nil
+			}
+			if reSecurityContextViolation.MatchString(msg) {
+				// The config rejection IS attributed: security_context_violation
+				// owns it (see the header comment on rule re-evaluation).
 				return nil
 			}
 			ref, parsed := parseMissingReference(msg)
@@ -679,8 +757,9 @@ func configMissingRefRule() Rule {
 					containerRef(in), ref.Kind, ref.Key)
 			default:
 				d.Explanation = fmt.Sprintf(
-					"The kubelet could not create %s: CreateContainerConfigError means a referenced ConfigMap, Secret or "+
-						"key could not be resolved. The container never started.",
+					"The kubelet could not create %s: it rejected the container's configuration, most commonly because "+
+						"a referenced ConfigMap, Secret or key could not be resolved. The kubelet message in the evidence "+
+						"below states the actual rejection. The container never started.",
 					containerRef(in))
 			}
 
@@ -728,7 +807,7 @@ func configMissingRefRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 10. volume_mount_failure
+// 11. volume_mount_failure
 // ---------------------------------------------------------------------------
 
 func volumeMountFailureRule() Rule {
@@ -792,7 +871,7 @@ func quoteAll(in []string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// 11. init_container_failure (app containers only)
+// 12. init_container_failure (app containers only)
 //
 // This rule fires when the container being diagnosed is an APP container whose
 // pod cannot progress because an init container failed. The "recursion" from
@@ -851,7 +930,7 @@ func initContainerFailureRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 12. init_container_stuck (init containers only)
+// 13. init_container_stuck (init containers only)
 // ---------------------------------------------------------------------------
 
 func initContainerStuckRule() Rule {
@@ -923,7 +1002,7 @@ func initContainerStuckRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 13. unschedulable
+// 14. unschedulable
 // ---------------------------------------------------------------------------
 
 func unschedulableRule() Rule {
@@ -1017,7 +1096,7 @@ func unschedulableRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 14. app_exit_nonzero
+// 15. app_exit_nonzero
 // ---------------------------------------------------------------------------
 
 // kubernetesSideCauseMatched reports whether any Kubernetes-side cause explains
@@ -1156,7 +1235,7 @@ func appExitNonzeroRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 15. sigkill_after_grace (app containers only)
+// 16. sigkill_after_grace (app containers only)
 // ---------------------------------------------------------------------------
 
 func sigkillAfterGraceRule() Rule {
@@ -1200,7 +1279,7 @@ func sigkillAfterGraceRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 16. completed_restart_loop (app containers only; exit 0 on an init
+// 17. completed_restart_loop (app containers only; exit 0 on an init
 // container is SUCCESS, never a finding)
 // ---------------------------------------------------------------------------
 
@@ -1243,7 +1322,7 @@ func completedRestartLoopRule() Rule {
 }
 
 // ---------------------------------------------------------------------------
-// 17. unknown (fallback)
+// 18. unknown (fallback)
 // ---------------------------------------------------------------------------
 
 // somethingIsWrong reports whether the inputs show evidence of a problem at

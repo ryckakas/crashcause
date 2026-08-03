@@ -55,22 +55,23 @@ func Rules() []Rule {
 // so the fallback can ask "did anything else match?" without recursing.
 func specificRules() []Rule {
 	return []Rule{
-		oomKilledRule(),            // 1
-		sigkillUnattributedRule(),  // 2
-		evictedRule(),              // 3
-		probeLivenessRule(),        // 4
-		probeStartupRule(),         // 5
-		imagePullAuthRule(),        // 6
-		imagePullNotFoundRule(),    // 7
-		imagePullOtherRule(),       // 8
-		configMissingRefRule(),     // 9
-		volumeMountFailureRule(),   // 10
-		initContainerFailureRule(), // 11
-		initContainerStuckRule(),   // 12
-		unschedulableRule(),        // 13
-		appExitNonzeroRule(),       // 14
-		sigkillAfterGraceRule(),    // 15
-		completedRestartLoopRule(), // 16
+		oomKilledRule(),                // 1
+		sigkillUnattributedRule(),      // 2
+		evictedRule(),                  // 3
+		probeLivenessRule(),            // 4
+		probeStartupRule(),             // 5
+		imagePullAuthRule(),            // 6
+		imagePullNotFoundRule(),        // 7
+		imagePullOtherRule(),           // 8
+		securityContextViolationRule(), // 9
+		configMissingRefRule(),         // 10
+		volumeMountFailureRule(),       // 11
+		initContainerFailureRule(),     // 12
+		initContainerStuckRule(),       // 13
+		unschedulableRule(),            // 14
+		appExitNonzeroRule(),           // 15
+		sigkillAfterGraceRule(),        // 16
+		completedRestartLoopRule(),     // 17
 	}
 }
 

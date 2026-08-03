@@ -125,6 +125,7 @@ func TestRulesTableIsCompleteAndOrdered(t *testing.T) {
 		CauseImagePullAuth,
 		CauseImagePullNotFound,
 		CauseImagePullOther,
+		CauseSecurityContextViolation,
 		CauseConfigMissingRef,
 		CauseVolumeMountFailure,
 		CauseInitContainerFailure,
@@ -669,6 +670,72 @@ func TestConfigMissingReferenceExtraction(t *testing.T) {
 			}
 			if !stepsContain(d, tc.wantCmd) {
 				t.Errorf("next steps must include %q, got %v", tc.wantCmd, d.NextSteps)
+			}
+		})
+	}
+}
+
+// https://github.com/ryckakas/crashcause/issues/17: a CreateContainerConfigError
+// caused by runAsNonRoot vs a root image was reported as image_pull_other,
+// because the Failed event message happens to contain the word "image".
+func TestSecurityContextConfigErrorIsNotImagePull(t *testing.T) {
+	tests := []struct {
+		name     string
+		message  string
+		wantExpl string
+	}{
+		{
+			name:     "image runs as root",
+			message:  "container has runAsNonRoot and image will run as root",
+			wantExpl: "the image is configured to run as root",
+		},
+		{
+			name:     "non-numeric user",
+			message:  "container has runAsNonRoot and image has non-numeric user (nginx), cannot verify user is non-root",
+			wantExpl: "non-numeric user",
+		},
+		{
+			name:     "explicit runAsUser 0",
+			message:  `container's runAsUser breaks non-root policy (pod: "runasnonroot-repro_default(1c6b8e2a)", container: nginx-proxy)`,
+			wantExpl: "sets runAsUser to root",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			in := baseInputs()
+			in.Container = "nginx-proxy"
+			in.Image = "nginx:alpine"
+			in.PodPhase = "Pending"
+			in.Waiting = WaitingState{Present: true, Reason: "CreateContainerConfigError", Message: tc.message}
+			in.Events = []Event{
+				warning("Failed", "Error: "+tc.message, 8480),
+				{Type: "Normal", Reason: "Pulled", Message: `Container image "nginx:alpine" already present on machine`, Count: 8479},
+			}
+
+			ds := Classify(in)
+			if len(ds) == 0 {
+				t.Fatal("expected a diagnosis")
+			}
+			for _, c := range []CauseCode{CauseImagePullAuth, CauseImagePullNotFound, CauseImagePullOther} {
+				if hasCause(ds, c) {
+					t.Errorf("the image was pulled successfully, %s must not fire; got %v", c, causes(ds))
+				}
+			}
+			if hasCause(ds, CauseConfigMissingRef) {
+				t.Errorf("no ConfigMap/Secret reference is missing, config_missing_reference must stand down; got %v", causes(ds))
+			}
+			if ds[0].Cause != CauseSecurityContextViolation {
+				t.Fatalf("primary diagnosis is %s, want %s (all: %v)", ds[0].Cause, CauseSecurityContextViolation, causes(ds))
+			}
+			if ds[0].Confidence != ConfidenceHigh {
+				t.Errorf("confidence is %s, want high", ds[0].Confidence)
+			}
+			if !evidenceContains(ds[0], tc.message) {
+				t.Errorf("evidence must quote the kubelet message %q, got %v", tc.message, ds[0].Evidence)
+			}
+			if !strings.Contains(ds[0].Explanation, tc.wantExpl) {
+				t.Errorf("explanation must contain %q, got %q", tc.wantExpl, ds[0].Explanation)
 			}
 		})
 	}

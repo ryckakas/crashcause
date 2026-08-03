@@ -72,6 +72,9 @@ type Options struct {
 	// Summarizer enables the AI layer. A nil Summarizer means AI is off, which
 	// is the default and the only state reachable without --ai.
 	Summarizer *ai.Summarizer
+	// Server is the API server URL the client talks to, used only to name the
+	// cluster in connectivity and credential failure messages. Empty is fine.
+	Server string
 
 	Out    io.Writer
 	ErrOut io.Writer
@@ -197,7 +200,7 @@ func (o Options) describeCollectError(err error) error {
 	case apierrors.IsForbidden(err):
 		return fmt.Errorf("not allowed to read pod %s/%s: %w", o.Namespace, o.Pod, err)
 	default:
-		return err
+		return explainClusterFailure(err, o.Server)
 	}
 }
 
