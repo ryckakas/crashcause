@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `--ai-model` flag on `inspect` and `watch` (and `ai.model` in the Helm
+  chart) to override the provider's default model. The `ai` package already
+  supported it; only the CLI wiring was missing, which pinned ollama users
+  to the 4.7 GB `llama3.1` default with no way to choose a smaller local
+  model such as `llama3.2:3b`.
 - Go module and dependency pinning (`github.com/ryckakas/crashcause`, Go 1.23,
   toolchain go1.23.1).
 - Shared engine type contracts: `CauseCode` taxonomy, `Diagnosis`, and `Inputs` types.

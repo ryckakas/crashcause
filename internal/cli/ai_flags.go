@@ -22,6 +22,7 @@ type aiOptions struct {
 	enabled     bool
 	provider    string
 	url         string
+	model       string
 	redact      bool
 	redactIPs   bool
 	redactExtra string
@@ -33,6 +34,7 @@ func (o *aiOptions) addAIFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&o.enabled, "ai", false, "generate an AI natural-language summary of the diagnosis")
 	fs.StringVar(&o.provider, "ai-provider", "anthropic", "AI provider to use: anthropic|openai|ollama")
 	fs.StringVar(&o.url, "ai-url", "", "override base URL for the AI provider (e.g. for a local ollama instance)")
+	fs.StringVar(&o.model, "ai-model", "", "model to use; empty means the provider's default (anthropic: claude-haiku-4-5, openai: gpt-4o-mini, ollama: llama3.1)")
 	fs.BoolVar(&o.redact, "ai-redact", true, "redact likely-sensitive values (secrets, tokens) from evidence before sending it to the AI provider")
 	fs.BoolVar(&o.redactIPs, "ai-redact-ips", false, "additionally redact IP addresses from evidence before sending it to the AI provider")
 	fs.StringVar(&o.redactExtra, "ai-redact-extra", "", "path to a file of extra regex patterns to redact from evidence before sending it to the AI provider")
@@ -71,6 +73,7 @@ func (o *aiOptions) buildSummarizer() (*ai.Summarizer, error) {
 		Provider: o.provider,
 		APIKey:   os.Getenv(apiKeyEnv),
 		BaseURL:  o.url,
+		Model:    o.model,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configuring AI provider: %w", err)
