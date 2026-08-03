@@ -153,6 +153,10 @@ ai:
   # claude-haiku-4-5, openai: gpt-4o-mini, ollama: llama3.1). Useful for
   # pointing ollama at a smaller local model, e.g. "llama3.2:3b".
   model: ""
+  # -- Per-summary timeout. Empty uses the 15s default, which is ample for a
+  # hosted API but often too short for a self-hosted ollama that must load
+  # several GB of weights on its first call. e.g. "60s".
+  timeout: ""
   # -- Namespaces whose logs may be sent to the AI provider. This allowlist
   # is fail-closed: an EMPTY list keeps AI summarization off in every
   # namespace even with ai.enabled=true. Use ["*"] to opt the whole cluster
