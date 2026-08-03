@@ -7,7 +7,7 @@ or `logs` output anywhere.
 ![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-> **Status: v0.1.1.**
+> **Status: pre-1.0.**
 >
 > - `crashcause inspect` and `crashcause watch` are both implemented end-to-end and
 >   unit-tested under `go test -race`: the full rule engine, human and `--output json`
@@ -114,12 +114,13 @@ scenario, and cleanup instructions.
 
 crashcause is not in the krew index yet, so `kubectl krew install crashcause` does not
 work. Until the index entry lands, install from the plugin manifest published with each
-release — it points at that release's archives and verifies their sha256. (`--manifest-url`
-is krew's development-only install path; it works fine here, it just isn't how a
-published plugin is normally fetched.)
+release — the `latest` URL below always resolves to the newest release's manifest, which
+points at that release's archives and verifies their sha256. (`--manifest-url` is krew's
+development-only install path; it works fine here, it just isn't how a published plugin
+is normally fetched.)
 
 ```sh
-kubectl krew install --manifest-url=https://github.com/ryckakas/crashcause/releases/download/v0.1.1/crashcause.yaml
+kubectl krew install --manifest-url=https://github.com/ryckakas/crashcause/releases/latest/download/crashcause.yaml
 ```
 
 Prebuilt `linux`/`darwin` `amd64`/`arm64` archives (plus `checksums.txt` and SBOMs) are
@@ -144,11 +145,12 @@ The chart is published as an OCI artifact to GitHub Container Registry:
 
 ```sh
 helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  --version 0.1.1 -n crashcause --create-namespace \
+  -n crashcause --create-namespace \
   -f my-values.yaml
 ```
 
-`helm show values oci://ghcr.io/ryckakas/charts/crashcause --version 0.1.1` prints the
+Helm resolves the newest published chart version; add `--version X.Y.Z` to pin a
+specific release. `helm show values oci://ghcr.io/ryckakas/charts/crashcause` prints the
 full default values. To install from a checkout instead — for local development, or to
 try chart changes before they are released:
 
@@ -484,6 +486,18 @@ make fmt lint test race cover build e2e helm-lint check
 ```
 
 `make check` mirrors what CI runs — if it's green locally, CI should be green too.
+
+### Releasing
+
+Every merged PR adds its entries to the CHANGELOG's `[Unreleased]` section; releasing
+is then one click. Run the **Release prep** workflow (Actions tab) with the version,
+e.g. `0.1.2` — it cuts the CHANGELOG and opens a "Release v0.1.2" PR. Merging that PR
+tags the merge commit, and the tag drives everything else automatically: goreleaser
+(archives, checksums, SBOMs, container images), the Helm chart (version stamped from
+the tag), and the krew manifest release asset. One-time setup: a fine-grained PAT with
+Contents read/write and Pull requests read/write on this repo, saved as an Actions
+secret named `RELEASE_PAT` — required because bot-created PRs and tags made with the
+default token would not trigger CI or the release workflow.
 
 ## License
 

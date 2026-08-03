@@ -1,0 +1,78 @@
+# One-click release, step 1 of 3: cut the CHANGELOG and open the release PR.
+#
+#   1. Run this workflow (Actions -> "Release prep" -> version, e.g. 0.1.2).
+#   2. Merge the "Release vX.Y.Z" PR it opens (CI runs on it as usual).
+#   3. release-tag.yml tags the merge commit, which fires release.yml
+#      (goreleaser, Helm chart, krew manifest). Nothing else is manual.
+#
+# Both the branch push and the PR creation authenticate with RELEASE_PAT (a
+# fine-grained PAT with Contents read/write + Pull requests read/write on
+# this repo, saved as an Actions secret). The default GITHUB_TOKEN cannot be
+# used here: GitHub suppresses workflow triggers for events created with it,
+# so a GITHUB_TOKEN-created PR would never run the pull_request CI workflows
+# and main's required checks (Lint, Test, ...) would sit pending forever.
+name: Release prep
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "release version, X.Y.Z without the leading v"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  prep:
+    name: Cut CHANGELOG and open the release PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the RELEASE_PAT secret
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "${RELEASE_PAT}" ]; then
+            echo "FAIL: the RELEASE_PAT secret is not set."
+            echo "Create a fine-grained PAT (Contents read/write, Pull requests read/write,"
+            echo "scoped to this repository) and save it as an Actions secret named RELEASE_PAT."
+            exit 1
+          fi
+
+      # fetch-depth 0 brings the tags along, which the prep script needs for
+      # its tag-already-exists check. The RELEASE_PAT is wired into the
+      # checkout so the branch push below carries its identity, not the
+      # default token's.
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
+
+      # The input is passed via env, never interpolated into the script text,
+      # so a malformed version string cannot become shell syntax.
+      - name: Cut the CHANGELOG
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          chmod +x hack/release-prep.sh
+          ./hack/release-prep.sh "${VERSION}"
+
+      - name: Push the branch and open the PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          branch="release-prep/v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git add CHANGELOG.md
+          git commit -m "Release v${VERSION}"
+          git push -u origin "${branch}"
+          gh pr create --base main --head "${branch}" \
+            --title "Release v${VERSION}" \
+            --body "Cuts the CHANGELOG's Unreleased section as ${VERSION}.
+
+Merging this PR tags the merge commit \`v${VERSION}\` (release-tag.yml), which runs the release workflow: goreleaser archives and images, the Helm chart, and the krew manifest release asset. Closing without merging cancels the release."

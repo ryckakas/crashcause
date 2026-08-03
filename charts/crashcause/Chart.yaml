@@ -5,10 +5,13 @@ description: >-
   cause as a Prometheus label, a structured stdout log line, or a Loki stream.
 type: application
 
-# version   = the chart's own version (bumped on every chart change)
-# appVersion = the crashcause release this chart defaults to (image tag)
-version: 0.1.1
-appVersion: "0.1.1"
+# Both values are deliberate 0.0.0-dev placeholders: the release workflow
+# stamps the real version and appVersion (the default image tag) from the
+# git tag at `helm package` time, and fails the release if a hardcoded
+# version sneaks back in here. When installing from a checkout, set
+# image.tag to a released version.
+version: 0.0.0-dev
+appVersion: "0.0.0-dev"
 
 kubeVersion: ">=1.23.0-0"
 

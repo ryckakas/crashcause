@@ -1,0 +1,64 @@
+# One-click release, step 2 of 3: tag the merged release PR.
+#
+# Fires when a release-prep/v* PR (opened by release-prep.yml) is merged
+# into main, and pushes the annotated tag vX.Y.Z at the merge commit. The
+# tag push authenticates with RELEASE_PAT: a tag pushed with the default
+# GITHUB_TOKEN would not fire release.yml's `push: tags` trigger, because
+# GitHub suppresses workflow triggers for events created with that token.
+name: Release tag
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: Tag the release merge commit
+    # The head.repo guard makes the fork case an explicit skip: a fork PR
+    # whose branch mimics release-prep/v* gets no secrets anyway, but that
+    # protection is implicit platform behavior - don't rely on it alone.
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'release-prep/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the RELEASE_PAT secret
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "${RELEASE_PAT}" ]; then
+            echo "FAIL: the RELEASE_PAT secret is not set - cannot push a tag that triggers the release."
+            exit 1
+          fi
+
+      # fetch-depth 0 brings the existing tags along for the re-run guard.
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Create and push the tag
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          version="${HEAD_REF#release-prep/v}"
+          if ! echo "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "FAIL: branch ${HEAD_REF} does not encode a strict X.Y.Z version - refusing to tag"
+            exit 1
+          fi
+          tag="v${version}"
+          # Re-running this job after a successful release must be a no-op,
+          # not a failure.
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "NOTICE: tag ${tag} already exists - nothing to do"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "crashcause ${tag}" "${MERGE_SHA}"
+          git push origin "refs/tags/${tag}"
