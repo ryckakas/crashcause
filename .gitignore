@@ -26,6 +26,9 @@ go.work.sum
 # vendor/ is not committed for this module; uncomment if that changes
 # vendor/
 
+# Stray log dumps (compiler errors, tool output)
+*.log
+
 # Editor / IDE noise
 .idea/
 .vscode/

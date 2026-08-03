@@ -126,8 +126,9 @@ serviceMonitor:
   skipCapabilityCheck: false
 
 loki:
-  # -- Loki push URL, e.g. http://loki:3100/loki/api/v1/push. Empty disables
-  # the Loki sink.
+  # -- Loki push URL, e.g. http://loki:3100/loki/api/v1/push. A base URL
+  # (http://loki:3100) also works: the /loki/api/v1/push path is appended
+  # automatically when not already present. Empty disables the Loki sink.
   url: ""
   # -- Name of an existing Secret holding Loki credentials. Its keys are
   # injected as environment variables verbatim, so name them exactly:
