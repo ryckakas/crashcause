@@ -25,7 +25,21 @@ type Summarizer struct {
 // A nil r means redaction is disabled (--ai-redact=false); that is the
 // caller's explicit choice and is honored, not silently overridden.
 func NewSummarizer(p Provider, r *Redactor) *Summarizer {
-	return &Summarizer{provider: p, redactor: r, timeout: DefaultTimeout}
+	return NewSummarizerWithTimeout(p, r, DefaultTimeout)
+}
+
+// NewSummarizerWithTimeout is NewSummarizer with an explicit per-call
+// deadline instead of DefaultTimeout. A non-positive timeout falls back to
+// DefaultTimeout.
+//
+// Self-hosted providers are the reason this is configurable: a local ollama
+// instance must load several gigabytes of weights on its first call, which
+// alone can outlast the default.
+func NewSummarizerWithTimeout(p Provider, r *Redactor, timeout time.Duration) *Summarizer {
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	return &Summarizer{provider: p, redactor: r, timeout: timeout}
 }
 
 // Provider returns the underlying provider, or nil.

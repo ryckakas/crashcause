@@ -104,6 +104,30 @@ func TestSummarizerAppliesDefaultDeadline(t *testing.T) {
 	}
 }
 
+func TestSummarizerWithTimeoutAppliesConfiguredDeadline(t *testing.T) {
+	// A provider slower than the configured timeout must be cut off by it,
+	// proving the value is actually used rather than DefaultTimeout (15s).
+	fake := &fakeProvider{blockFor: 5 * time.Second}
+	s := NewSummarizerWithTimeout(fake, nil, 40*time.Millisecond)
+
+	start := time.Now()
+	if _, err := s.Summarize(context.Background(), Request{Cause: "unknown"}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected the configured deadline to fire, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("configured timeout was ignored (%s elapsed)", elapsed)
+	}
+}
+
+func TestSummarizerWithTimeoutRejectsNonPositive(t *testing.T) {
+	fake := &fakeProvider{summary: "ok"}
+	for _, d := range []time.Duration{0, -time.Second} {
+		if got := NewSummarizerWithTimeout(fake, nil, d).timeout; got != DefaultTimeout {
+			t.Errorf("NewSummarizerWithTimeout(%v).timeout = %v, want DefaultTimeout", d, got)
+		}
+	}
+}
+
 func TestSummarizerKeepsCallerDeadline(t *testing.T) {
 	fake := &fakeProvider{blockFor: 5 * time.Second}
 	s := NewSummarizer(fake, nil)

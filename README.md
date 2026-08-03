@@ -304,7 +304,7 @@ crashcause watch [flags]
 | `--leader-election-id` | `crashcause` | Name of the leader-election Lease. |
 | `--health-addr` | `:8081` | Address serving `/healthz` and `/readyz`. |
 | `--ai-namespaces` | (empty: AI off everywhere) | Namespace allowlist for AI summarization. Empty keeps AI inert in every namespace, even with `--ai` set; pass `"*"` to opt the whole cluster in. |
-| `--ai`, `--ai-provider`, `--ai-url`, `--ai-model`, `--ai-redact`, `--ai-redact-ips`, `--ai-redact-extra` | see below | Shared AI flags, identical to `inspect`. |
+| `--ai`, `--ai-provider`, `--ai-url`, `--ai-model`, `--ai-timeout`, `--ai-redact`, `--ai-redact-ips`, `--ai-redact-extra` | see below | Shared AI flags, identical to `inspect`. |
 
 ### stdout (default, always on)
 
@@ -367,7 +367,9 @@ Providers: `anthropic`, `openai`, `ollama` (`--ai-provider`). **`ollama` is the 
 path for privacy-sensitive environments** — it's keyless and self-hosted, so nothing
 leaves your machine or cluster. Each provider has a sensible default model
 (`claude-haiku-4-5`, `gpt-4o-mini`, `llama3.1`); override it with `--ai-model`, e.g.
-`--ai-model llama3.2:3b` to run a smaller local model. The API key, when one is needed, comes **only** from the
+`--ai-model llama3.2:3b` to run a smaller local model. Each summary is bounded by
+`--ai-timeout` (default 15s) — ample for a hosted API, but raise it for a self-hosted
+model that has to load several GB of weights on its first call. The API key, when one is needed, comes **only** from the
 `CRASHCAUSE_AI_API_KEY` environment variable — never a command-line flag (flags leak via
 `ps`), and never logged. In Helm, the key is mounted from a Kubernetes Secret you provide
 (`ai.existingSecret` + `ai.secretKey`, default key name `api-key`) into that environment

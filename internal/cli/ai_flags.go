@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -23,6 +24,7 @@ type aiOptions struct {
 	provider    string
 	url         string
 	model       string
+	timeout     time.Duration
 	redact      bool
 	redactIPs   bool
 	redactExtra string
@@ -35,6 +37,7 @@ func (o *aiOptions) addAIFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.provider, "ai-provider", "anthropic", "AI provider to use: anthropic|openai|ollama")
 	fs.StringVar(&o.url, "ai-url", "", "override base URL for the AI provider (e.g. for a local ollama instance)")
 	fs.StringVar(&o.model, "ai-model", "", "model to use; empty means the provider's default (anthropic: claude-haiku-4-5, openai: gpt-4o-mini, ollama: llama3.1)")
+	fs.DurationVar(&o.timeout, "ai-timeout", ai.DefaultTimeout, "per-summary timeout; raise it for a self-hosted model that must load weights on its first call")
 	fs.BoolVar(&o.redact, "ai-redact", true, "redact likely-sensitive values (secrets, tokens) from evidence before sending it to the AI provider")
 	fs.BoolVar(&o.redactIPs, "ai-redact-ips", false, "additionally redact IP addresses from evidence before sending it to the AI provider")
 	fs.StringVar(&o.redactExtra, "ai-redact-extra", "", "path to a file of extra regex patterns to redact from evidence before sending it to the AI provider")
@@ -74,13 +77,14 @@ func (o *aiOptions) buildSummarizer() (*ai.Summarizer, error) {
 		APIKey:   os.Getenv(apiKeyEnv),
 		BaseURL:  o.url,
 		Model:    o.model,
+		Timeout:  o.timeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configuring AI provider: %w", err)
 	}
 
-	fmt.Fprintln(os.Stderr, firstUseNotice)
-	return ai.NewSummarizer(provider, redactor), nil
+	_, _ = fmt.Fprintln(os.Stderr, firstUseNotice)
+	return ai.NewSummarizerWithTimeout(provider, redactor, o.timeout), nil
 }
 
 // readRedactPatterns loads one regex per line from path, skipping blank

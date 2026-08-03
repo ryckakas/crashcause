@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supported it; only the CLI wiring was missing, which pinned ollama users
   to the 4.7 GB `llama3.1` default with no way to choose a smaller local
   model such as `llama3.2:3b`.
+- `--ai-timeout` flag (and `ai.timeout` in the chart) bounding each summary,
+  plus `ai.NewSummarizerWithTimeout`. The 15s default suits a hosted API but
+  is routinely too short for a self-hosted ollama, where the first call also
+  pays for loading several GB of weights.
 - Go module and dependency pinning (`github.com/ryckakas/crashcause`, Go 1.23,
   toolchain go1.23.1).
 - Shared engine type contracts: `CauseCode` taxonomy, `Diagnosis`, and `Inputs` types.
