@@ -14,7 +14,7 @@ to point `crashcause inspect` at.
   not bundled with this repo, install separately.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) — not bundled
   with this repo, install separately.
-- Go 1.23.1 (matches the `toolchain` line in `go.mod`) — needed to build
+- Go 1.25 (matches the `toolchain` line in `go.mod`) — needed to build
   the `crashcause` binary from source; no prebuilt releases exist yet.
 - [jq](https://jqlang.github.io/jq/) — optional, only needed for the
   `--output json | jq ...` steps below and for running `hack/e2e.sh`.
