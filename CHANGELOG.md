@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supported it; only the CLI wiring was missing, which pinned ollama users
   to the 4.7 GB `llama3.1` default with no way to choose a smaller local
   model such as `llama3.2:3b`.
+- Two log-tail patterns: `dns resolution failure` (Python `gaierror`, glibc
+  `Name or service not known`, Go `no such host`, Node `EAI_NONAME`, libpq
+  `could not translate host name`) and `python traceback`. A Python service
+  failing to resolve its database — one of the most common shapes of failure
+  in a cluster — previously produced "no known crash pattern matched".
 - `--ai-timeout` flag (and `ai.timeout` in the chart) bounding each summary,
   plus `ai.NewSummarizerWithTimeout`. The 15s default suits a hosted API but
   is routinely too short for a self-hosted ollama, where the first call also
@@ -88,6 +93,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Flaky Loki test that could hang CI for ten minutes.
+  `TestLokiEmitNeverBlocksAndDropsOnFullBuffer` asserted a 100ms per-call
+  latency bound, which a non-blocking channel send can exceed purely from
+  scheduler starvation when `-race` and a parallel package run saturate the
+  CPU. Worse, the assertion fired before the test released the wedged HTTP
+  handler, so `httptest.Server.Close` waited on the in-flight request and the
+  failure became a test-binary timeout. The property is now checked with a
+  watchdog over the whole batch, and the test server releases parked handlers
+  on cleanup regardless of how the test exits. The sink itself was correct.
+- Probe explanations quoted false arithmetic: `probeBudget` folded
+  `initialDelaySeconds` into the returned budget, so `probe_startup_failure`
+  printed `failureThreshold=2 x periodSeconds=5 = 15s` (that is 10s), and
+  `probe_liveness_failure` called the initial delay part of the time spent
+  "of failing probes" — no probe runs during it. The helper now returns the
+  probing window and the total separately.
+- Log-hint evidence quoted the wrong line: `findLine` scanned lines before
+  needles, so a Python DNS failure was evidenced by the intermediate stack
+  frame `for res in getaddrinfo(...)` instead of the `Name does not resolve`
+  line. Needle order (most specific first) now decides, and within a needle
+  the last match wins, since a crash log's decisive line is at its end.
 - `probe_liveness_failure` emitted a broken suggested command: it stripped the
   leading space from the container flag, welding it onto the namespace
   (`kubectl exec pod -n prod-c api -- ...`), so the command failed if pasted.
