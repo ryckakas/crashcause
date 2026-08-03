@@ -130,6 +130,23 @@ func normalizeOwner(owner engine.Owner) (kind, name string) {
 	return kind, trimmed
 }
 
+// SeriesKey identifies one normalized crashcause_diagnoses_total series.
+type SeriesKey struct {
+	Namespace string
+	OwnerKind string
+	OwnerName string
+}
+
+// SeriesKeyFor returns the series identity IncCrash and ForgetSeries map an
+// Owner to. Distinct owners can share one key — normalizeOwner folds every
+// run Job of one CronJob into a single series — so callers deciding whether
+// to ForgetSeries must first check that no other live workload has the same
+// key.
+func SeriesKeyFor(namespace string, owner engine.Owner) SeriesKey {
+	kind, name := normalizeOwner(owner)
+	return SeriesKey{Namespace: namespace, OwnerKind: kind, OwnerName: name}
+}
+
 // IncCrash increments crashcause_diagnoses_total for one observed crash.
 //
 // This must be called on EVERY crash the tool observes, independent of

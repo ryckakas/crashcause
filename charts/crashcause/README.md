@@ -152,7 +152,7 @@ must be set to render offline.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `loki.url` | string | `""` | Loki push URL, e.g. `http://loki:3100/loki/api/v1/push`; empty disables the Loki sink. |
+| `loki.url` | string | `""` | Loki push URL, e.g. `http://loki:3100/loki/api/v1/push`; a base URL (`http://loki:3100`) also works — the `/loki/api/v1/push` path is appended automatically when not already present. Empty disables the Loki sink. |
 | `loki.existingSecret` | string | `""` | Name of an existing Secret whose keys are injected verbatim as env vars; see [Secrets](#secrets) for the required key names. |
 
 ### ai
@@ -162,6 +162,8 @@ must be set to render offline.
 | `ai.enabled` | bool | `false` | Enables AI-generated crash summaries; off by default. |
 | `ai.provider` | string | `anthropic` | AI provider: `anthropic`, `openai`, or `ollama`. |
 | `ai.url` | string | `""` | Overrides the provider base URL, e.g. `http://ollama:11434` for an in-cluster Ollama. |
+| `ai.model` | string | `""` | Overrides the model; empty uses the provider default (anthropic: `claude-haiku-4-5`, openai: `gpt-4o-mini`, ollama: `llama3.1`). Useful for pointing ollama at a smaller local model, e.g. `llama3.2:3b`. |
+| `ai.timeout` | string | `""` | Per-summary timeout; empty uses the `15s` default, which is ample for a hosted API but often too short for a self-hosted ollama that must load several GB of weights on its first call. E.g. `60s`. |
 | `ai.namespaces` | list | `[]` | Fail-closed allowlist of namespaces whose logs may be sent to the AI provider; an **empty list keeps AI summarization off in every namespace, even with `ai.enabled=true`**. Use `["*"]` to explicitly opt the whole cluster in. |
 | `ai.redact` | bool | `true` | Enables best-effort redaction of sensitive-looking patterns before sending log content to the provider. |
 | `ai.redactIPs` | bool | `false` | Additionally redacts IP-address-shaped patterns. |
@@ -226,6 +228,8 @@ hatch for anything this chart does not model.
 | `ai.enabled` | `--ai` | Only when `true`. |
 | `ai.provider` | `--ai-provider=<value>` | Only when `ai.enabled=true`. |
 | `ai.url` | `--ai-url=<value>` | Only when `ai.enabled=true` and set. |
+| `ai.model` | `--ai-model=<value>` | Only when `ai.enabled=true` and set. |
+| `ai.timeout` | `--ai-timeout=<value>` | Only when `ai.enabled=true` and set. |
 | `ai.redact` | `--ai-redact=<true\|false>` | Only when `ai.enabled=true`. |
 | `ai.redactIPs` | `--ai-redact-ips=<true\|false>` | Only when `ai.enabled=true`. |
 | `ai.namespaces` | `--ai-namespaces=<comma-joined>` | Only when `ai.enabled=true` and non-empty. |
@@ -320,6 +324,9 @@ loki:
   url: http://loki:3100/loki/api/v1/push
   existingSecret: crashcause-loki
 ```
+
+A base URL (`http://loki:3100`) works too — the `/loki/api/v1/push` path is
+appended automatically when not already present.
 
 ## AI notes
 

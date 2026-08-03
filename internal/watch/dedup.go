@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ryckakas/crashcause/internal/engine"
+	"github.com/ryckakas/crashcause/internal/sinks"
 )
 
 // workloadKey identifies the logical workload a diagnosis belongs to.
@@ -202,6 +203,20 @@ func (c *dedupCache) forgetWorkload(wk workloadKey) (engine.Owner, bool) {
 	delete(c.byWorkload, wk)
 	c.pruneCauseIndexLocked()
 	return owner, true
+}
+
+// hasSeries reports whether any live entry still maps to the given metric
+// series identity. O(entries) is fine: the cache is bounded by the TTL sweep
+// and forget calls are rare (pod deletion, sweep).
+func (c *dedupCache) hasSeries(key sinks.SeriesKey) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k, entry := range c.entries {
+		if sinks.SeriesKeyFor(k.workload.namespace, entry.owner) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // pruneCauseIndexLocked drops last-cause records for (workload, container)

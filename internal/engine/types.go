@@ -122,9 +122,13 @@ type RunningState struct {
 
 // Event is a plain-Go projection of a Kubernetes Event relevant to a pod.
 type Event struct {
-	Type      string // "Normal" | "Warning"
-	Reason    string // "Killing", "Unhealthy", "BackOff", "FailedScheduling", "FailedMount", ...
-	Message   string
+	Type    string // "Normal" | "Warning"
+	Reason  string // "Killing", "Unhealthy", "BackOff", "FailedScheduling", "FailedMount", ...
+	Message string
+	// Container is the container the event is attributed to (from
+	// involvedObject.fieldPath). Empty when the event is not
+	// container-scoped or the server omitted FieldPath.
+	Container string
 	Count     int32
 	FirstSeen time.Time
 	LastSeen  time.Time

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -48,6 +49,11 @@ func (c *Controller) runLeaderElected(ctx context.Context) error {
 	// nobody is left waiting for it.
 	workErr := make(chan error, 1)
 
+	// A standby replica never runs OnStartedLeading, so nothing will ever
+	// send on workErr; waiting for it would stall shutdown for the full
+	// drain timeout and log a misleading warning.
+	var led atomic.Bool
+
 	elector, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
 		Lock:            lock,
 		LeaseDuration:   leaseDuration,
@@ -57,6 +63,7 @@ func (c *Controller) runLeaderElected(ctx context.Context) error {
 		Name:            c.cfg.LeaderElectionID,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(leaderCtx context.Context) {
+				led.Store(true)
 				workErr <- c.runWork(leaderCtx)
 			},
 			OnStoppedLeading: func() {
@@ -73,14 +80,17 @@ func (c *Controller) runLeaderElected(ctx context.Context) error {
 	elector.Run(ctx)
 
 	// Run returns as soon as the lease is lost, but OnStartedLeading runs in
-	// its own goroutine; wait (briefly) for it so shutdown is ordered.
-	select {
-	case err := <-workErr:
-		if err != nil {
-			return err
+	// its own goroutine; wait (briefly) for it so shutdown is ordered. A
+	// replica that never led has no work loop to wait for.
+	if led.Load() {
+		select {
+		case err := <-workErr:
+			if err != nil {
+				return err
+			}
+		case <-time.After(leaderWorkDrainTimeout):
+			slog.Warn("crashcause watch work loop did not stop within the drain timeout")
 		}
-	case <-time.After(leaderWorkDrainTimeout):
-		slog.Warn("crashcause watch work loop did not stop within the drain timeout")
 	}
 
 	if ctx.Err() == nil {

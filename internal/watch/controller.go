@@ -70,6 +70,11 @@ type podRecord struct {
 	fingerprint string
 	workload    workloadKey
 	ownerKnown  bool
+
+	// lastEnqueued is when the pod was last handed to a worker, so a pod
+	// whose broken state never changes (constant fingerprint) can still be
+	// re-enqueued once per ReemitInterval.
+	lastEnqueued time.Time
 }
 
 // Controller is the watch-mode runtime.
@@ -304,28 +309,34 @@ func (c *Controller) buildFactories() ([]informers.SharedInformerFactory, error)
 }
 
 // observe is the informer-side half of trigger detection: it records the pod's
-// fingerprint and enqueues collection only when the fingerprint changed AND
-// the new state is worth an API call. It never blocks the informer.
+// fingerprint and enqueues collection when the fingerprint changed AND the new
+// state is worth an API call. A pod that is still broken with an UNCHANGED
+// fingerprint (an unschedulable Pending pod, a stuck init container) is
+// re-enqueued at most once per ReemitInterval: nothing else would ever refresh
+// its dedup entry, so the TTL sweep would drop its metric series while the pod
+// is still broken. It never blocks the informer.
 func (c *Controller) observe(pod *corev1.Pod) {
 	if pod == nil {
 		return
 	}
 	fp := podFingerprint(pod)
+	now := c.now()
+	triggers := warrantsTrigger(pod, now, c.cfg.InitStuckThreshold)
 
 	c.mu.Lock()
 	rec, known := c.podState[pod.UID]
 	unchanged := known && rec.fingerprint == fp
 	rec.fingerprint = fp
+	enqueue := triggers && (!unchanged || now.Sub(rec.lastEnqueued) >= c.cfg.ReemitInterval)
+	if enqueue {
+		rec.lastEnqueued = now
+	}
 	c.podState[pod.UID] = rec
 	c.mu.Unlock()
 
-	if unchanged {
-		return
+	if enqueue {
+		c.enqueue(pod)
 	}
-	if !warrantsTrigger(pod, c.now(), c.cfg.InitStuckThreshold) {
-		return
-	}
-	c.enqueue(pod)
 }
 
 // enqueue hands a pod to a worker without ever blocking the informer
@@ -501,8 +512,19 @@ func (c *Controller) forgetPod(pod *corev1.Pod) {
 		return
 	}
 	if owner, ok := c.cache.forgetWorkload(rec.workload); ok {
-		c.prom.ForgetSeries(rec.workload.namespace, owner)
+		c.forgetSeriesUnlessShared(rec.workload.namespace, owner)
 	}
+}
+
+// forgetSeriesUnlessShared retires a workload's metric series unless another
+// live workload still maps to the same normalized series — normalizeOwner
+// folds every run Job of one CronJob into a single series, so forgetting one
+// finished run must not wipe the counter the other runs still increment.
+func (c *Controller) forgetSeriesUnlessShared(namespace string, owner engine.Owner) {
+	if c.cache.hasSeries(sinks.SeriesKeyFor(namespace, owner)) {
+		return
+	}
+	c.prom.ForgetSeries(namespace, owner)
 }
 
 // podFromDeleteEvent unwraps the tombstone the informer delivers when a
@@ -538,7 +560,7 @@ func (c *Controller) sweepLoop(ctx context.Context) {
 // workload that lost its last key.
 func (c *Controller) sweepDedup() {
 	for _, f := range c.cache.sweep() {
-		c.prom.ForgetSeries(f.namespace, f.owner)
+		c.forgetSeriesUnlessShared(f.namespace, f.owner)
 	}
 }
 

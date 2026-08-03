@@ -84,6 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   held back via a Dependabot ignore rule: it requires Go 1.26, which
   golangci-lint does not support yet.
 
+- OpenAI provider sends `max_completion_tokens` instead of the deprecated
+  `max_tokens` parameter.
+
 ### Security
 
 - Upgraded indirect dependencies `golang.org/x/text` (v0.16.0 → v0.40.0) and
@@ -122,3 +125,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.golangci.yml`: removed the `exhaustive.check-generated` setting, which
   golangci-lint v2.12 no longer accepts (config schema validation failed in
   CI).
+- Loki sink now accepts both a base URL and a full push URL; previously the
+  documented full-URL form (`http://loki:3100/loki/api/v1/push`) silently
+  failed because the push path was appended a second time.
+- Statically-broken pods (unschedulable, stuck init) now re-emit per
+  re-emit interval and keep their Prometheus metric series alive for as
+  long as they stay broken.
+- Deleting one finished Job run no longer resets the shared CronJob metric
+  series.
+- Standby replicas no longer stall 10 seconds at shutdown with a misleading
+  drain warning.
+- Events are now attributed to their container, preventing cross-container
+  misdiagnosis in multi-container pods.

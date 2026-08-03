@@ -279,9 +279,6 @@ never breaks on a healthy pod.
 
 ## `watch` mode + sinks
 
-> As noted in the status block above, `crashcause watch` is not yet wired up to a
-> running command. This section documents the target flags and sink behavior.
-
 ```sh
 crashcause watch [flags]
 ```

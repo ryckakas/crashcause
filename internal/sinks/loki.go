@@ -74,8 +74,9 @@ const (
 // variables are ignored entirely. Credential values are never logged, never
 // echoed in errors, and never written to a Loki line.
 type LokiConfig struct {
-	// URL is the Loki base URL with no path, e.g. "http://loki:3100".
-	// Required; the sink appends /loki/api/v1/push itself.
+	// URL is either the Loki base URL, e.g. "http://loki:3100" (the sink
+	// appends /loki/api/v1/push itself), or the full push URL already ending
+	// in /loki/api/v1/push. Required.
 	URL string
 
 	// TenantID, when non-empty, is sent as the X-Scope-OrgID header for
@@ -224,8 +225,16 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 
+	// Operators paste both forms: the base URL and the full push URL the
+	// Loki docs advertise. Appending unconditionally would turn the latter
+	// into .../push/loki/api/v1/push and silently 404 every batch.
+	pushURL := strings.TrimRight(parsed.String(), "/")
+	if !strings.HasSuffix(pushURL, lokiPushPath) {
+		pushURL += lokiPushPath
+	}
+
 	s := &lokiSink{
-		pushURL:   strings.TrimRight(parsed.String(), "/") + lokiPushPath,
+		pushURL:   pushURL,
 		tenantID:  strings.TrimSpace(cfg.TenantID),
 		batchSize: batchSize,
 		batchWait: batchWait,

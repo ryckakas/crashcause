@@ -57,11 +57,11 @@ func livenessProbeContext(in Inputs) (unhealthy, killing []Event, ok bool) {
 	if effectiveKind(in) != KindApp {
 		return nil, nil, false
 	}
-	unhealthy = eventsMatching(in, "Liveness")
+	unhealthy = eventsForContainer(in, eventsMatching(in, "Liveness"))
 	if len(unhealthy) == 0 {
 		return nil, nil, false
 	}
-	killing = eventsByReason(in, "Killing")
+	killing = eventsForContainer(in, eventsByReason(in, "Killing"))
 	if len(killing) == 0 && in.RestartCount == 0 {
 		// A liveness probe that failed but never caused a kill or a restart is
 		// not (yet) a crash cause.
@@ -75,11 +75,11 @@ func startupProbeContext(in Inputs) (unhealthy, killing []Event, ok bool) {
 	if effectiveKind(in) != KindApp {
 		return nil, nil, false
 	}
-	unhealthy = eventsMatching(in, "Startup")
+	unhealthy = eventsForContainer(in, eventsMatching(in, "Startup"))
 	if len(unhealthy) == 0 {
 		return nil, nil, false
 	}
-	killing = eventsByReason(in, "Killing")
+	killing = eventsForContainer(in, eventsByReason(in, "Killing"))
 	if len(killing) == 0 && in.RestartCount == 0 {
 		return nil, nil, false
 	}
@@ -1097,9 +1097,8 @@ func appExitNonzeroRule() Rule {
 				expl += " Exit code 143 is SIGTERM, and the pod has no deletionTimestamp and its owner is not rolling: " +
 					"something inside the pod sent SIGTERM to the process, so this was not a Kubernetes-initiated stop."
 			}
-			for _, h := range hints {
-				expl += fmt.Sprintf(" The log tail shows %s.", h.Note)
-				break
+			if len(hints) > 0 {
+				expl += fmt.Sprintf(" The log tail shows %s.", hints[0].Note)
 			}
 			d.Explanation = expl
 
