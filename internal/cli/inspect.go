@@ -71,7 +71,7 @@ func runInspect(cmd *cobra.Command, args []string, opts *inspectOptions) error {
 		return fmt.Errorf("building kubernetes client: %w", err)
 	}
 
-	summarizer, err := opts.ai.buildSummarizer()
+	summarizer, err := opts.ai.buildSummarizer(cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"net/http"
+	"strings"
 )
 
 // anthropicProvider talks to the Anthropic Messages API over plain net/http.
@@ -54,12 +55,11 @@ func (p *anthropicProvider) Summarize(ctx context.Context, req Request) (string,
 	if err := p.client.postJSON(ctx, "/v1/messages", header, payload, &resp); err != nil {
 		return "", err
 	}
-	var text string
+	var text strings.Builder
 	for _, block := range resp.Content {
 		if block.Type == "" || block.Type == "text" {
-			text = block.Text
-			break
+			text.WriteString(block.Text)
 		}
 	}
-	return finalizeSummary(p.client.name, text)
+	return finalizeSummary(p.client.name, text.String())
 }

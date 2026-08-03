@@ -51,7 +51,8 @@ func (s *Summarizer) Provider() Provider {
 }
 
 // Summarize redacts req, calls the provider, and returns the summary or an
-// error. It applies DefaultTimeout when ctx carries no deadline of its own,
+// error. When ctx carries no deadline of its own, it applies the configured
+// timeout (DefaultTimeout unless overridden via NewSummarizerWithTimeout),
 // so a hung provider cannot stall a diagnosis.
 //
 // The returned error is never fatal to the caller: on error the caller emits

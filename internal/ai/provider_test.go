@@ -146,6 +146,23 @@ func TestAnthropicSummarize(t *testing.T) {
 	assertPromptCarriesEvidence(t, msgs[0]["content"])
 }
 
+func TestAnthropicSummarizeConcatenatesTextBlocks(t *testing.T) {
+	srv, _ := newTestServer(t, http.StatusOK,
+		`{"content":[{"type":"text","text":""},{"type":"tool_use"},{"type":"text","text":"Postgres refused"},{"type":"text","text":" the connection."}]}`)
+
+	p, err := New(Config{Provider: ProviderAnthropic, APIKey: testAPIKey, BaseURL: srv.URL})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, err := p.Summarize(context.Background(), sampleRequest())
+	if err != nil {
+		t.Fatalf("Summarize: %v", err)
+	}
+	if want := "Postgres refused the connection."; got != want {
+		t.Errorf("Summarize() = %q, want %q", got, want)
+	}
+}
+
 func TestOpenAISummarize(t *testing.T) {
 	srv, rec := newTestServer(t, http.StatusOK,
 		`{"choices":[{"message":{"role":"assistant","content":"Postgres refused the connection."}}]}`)
@@ -175,6 +192,12 @@ func TestOpenAISummarize(t *testing.T) {
 	}
 	if got, want := body["model"], defaultOpenAIModel; got != want {
 		t.Errorf("model = %v, want %v", got, want)
+	}
+	if _, ok := body["max_completion_tokens"]; !ok {
+		t.Errorf("request body has no max_completion_tokens: %v", body)
+	}
+	if _, ok := body["max_tokens"]; ok {
+		t.Errorf("request body still carries the deprecated max_tokens: %v", body)
 	}
 	msgs := chatMessages(t, body)
 	if len(msgs) != 2 {

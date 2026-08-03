@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,7 @@ const firstUseNotice = "crashcause: AI summarization is enabled. Redaction is be
 // buildSummarizer turns the parsed AI flags into a ready ai.Summarizer, or
 // (nil, nil) when AI is disabled. The API key comes exclusively from the
 // CRASHCAUSE_AI_API_KEY environment variable.
-func (o *aiOptions) buildSummarizer() (*ai.Summarizer, error) {
+func (o *aiOptions) buildSummarizer(errOut io.Writer) (*ai.Summarizer, error) {
 	if !o.enabled {
 		return nil, nil
 	}
@@ -83,7 +84,7 @@ func (o *aiOptions) buildSummarizer() (*ai.Summarizer, error) {
 		return nil, fmt.Errorf("configuring AI provider: %w", err)
 	}
 
-	_, _ = fmt.Fprintln(os.Stderr, firstUseNotice)
+	_, _ = fmt.Fprintln(errOut, firstUseNotice)
 	return ai.NewSummarizerWithTimeout(provider, redactor, o.timeout), nil
 }
 
