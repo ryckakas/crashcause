@@ -141,7 +141,7 @@ func (w *lockedWriter) diagnoses(t *testing.T) []engine.Diagnosis {
 // Inputs.Now and the dedup cache).
 func newTestController(t *testing.T, clk *fakeClock, cfg Config, objs ...runtime.Object) (*Controller, *fake.Clientset, *lockedWriter) {
 	t.Helper()
-	client := fake.NewSimpleClientset(objs...)
+	client := fake.NewClientset(objs...)
 	if clk != nil {
 		cfg.clock = clk.Now
 	}

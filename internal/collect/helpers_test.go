@@ -49,7 +49,7 @@ func testOptions() Options {
 // newClient builds a fake clientset seeded with the given objects.
 func newClient(t *testing.T, objs ...runtime.Object) *fake.Clientset {
 	t.Helper()
-	return fake.NewSimpleClientset(objs...)
+	return fake.NewClientset(objs...)
 }
 
 // crashedStatus is a container status for a container that OOMed and is now
