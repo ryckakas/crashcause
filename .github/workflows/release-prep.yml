@@ -71,8 +71,11 @@ jobs:
           git add CHANGELOG.md
           git commit -m "Release v${VERSION}"
           git push -u origin "${branch}"
+          # The body is printf-built: a multi-line string literal here would
+          # need a column-0 continuation line, which terminates this YAML
+          # block scalar and leaks the rest of the text into the document
+          # as an unknown top-level key GitHub rejects.
+          body="$(printf 'Cuts the CHANGELOG'\''s Unreleased section as %s.\n\nMerging this PR tags the merge commit `v%s` (release-tag.yml), which runs the release workflow: goreleaser archives and images, the Helm chart, and the krew manifest release asset. Closing without merging cancels the release.' "${VERSION}" "${VERSION}")"
           gh pr create --base main --head "${branch}" \
             --title "Release v${VERSION}" \
-            --body "Cuts the CHANGELOG's Unreleased section as ${VERSION}.
-
-Merging this PR tags the merge commit \`v${VERSION}\` (release-tag.yml), which runs the release workflow: goreleaser archives and images, the Helm chart, and the krew manifest release asset. Closing without merging cancels the release."
+            --body "${body}"
