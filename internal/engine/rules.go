@@ -445,7 +445,7 @@ func probeLivenessRule() Rule {
 			}
 			appendSteps(d,
 				"Call the liveness endpoint yourself: kubectl exec "+podRef(in)+" "+nsFlag(in)+
-					strings.TrimPrefix(containerFlag(in), " ")+" -- wget -qO- http://localhost:<port><path>",
+					containerFlag(in)+" -- wget -qO- http://localhost:<port><path>",
 				"Check whether the probe is too strict: raise failureThreshold / periodSeconds / timeoutSeconds",
 				"If the app is slow to start, add a startupProbe instead of a long initialDelaySeconds on liveness",
 				"Make the liveness endpoint cheap and dependency-free: it must not call the database or downstream services",

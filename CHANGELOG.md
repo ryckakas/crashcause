@@ -88,6 +88,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `probe_liveness_failure` emitted a broken suggested command: it stripped the
+  leading space from the container flag, welding it onto the namespace
+  (`kubectl exec pod -n prod-c api -- ...`), so the command failed if pasted.
+  Found while running the tool against a live kind cluster. Regression tests
+  now assert that no rule's suggested commands concatenate flags.
+
 - `.golangci.yml`: removed the `exhaustive.check-generated` setting, which
   golangci-lint v2.12 no longer accepts (config schema validation failed in
   CI).

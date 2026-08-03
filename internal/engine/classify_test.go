@@ -1085,3 +1085,102 @@ func TestUnknownNeverAccompaniesAnotherDiagnosis(t *testing.T) {
 		t.Fatalf("unknown must not fire alongside %v", causes(got))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Suggested-command hygiene
+// ---------------------------------------------------------------------------
+
+// TestNextStepCommandsAreCopyPasteable guards against flag-concatenation bugs
+// in the suggested commands. A real one shipped: the liveness rule stripped
+// the leading space from containerFlag() and welded the container flag onto
+// the namespace, emitting `kubectl exec pod -n prod-c api -- ...`, which fails
+// the moment a user pastes it. NextSteps are the actionable half of a
+// diagnosis, so a malformed command is a real defect, not cosmetics.
+func TestNextStepCommandsAreCopyPasteable(t *testing.T) {
+	probe := baseInputs()
+	probe.LastTermination = terminated(137, "Error")
+	probe.RestartCount = 4
+	probe.Liveness = ProbeSpec{Defined: true, FailureThreshold: 2, PeriodSeconds: 5, TimeoutSeconds: 1}
+	probe.Events = []Event{
+		warning("Unhealthy", "Liveness probe failed: connection refused", 12),
+		warning("Killing", "Container api failed liveness probe, will be restarted", 3),
+	}
+
+	oom := baseInputs()
+	oom.LastTermination = terminated(137, "OOMKilled")
+	oom.RestartCount = 3
+
+	appCrash := baseInputs()
+	appCrash.LastTermination = terminated(1, "Error")
+	appCrash.RestartCount = 2
+	appCrash.LogTail = []string{"panic: runtime error: index out of range"}
+
+	initStuck := baseInputs()
+	initStuck.Kind = KindInit
+	initStuck.Container = "wait-for-db"
+	initStuck.PodPhase = "Pending"
+	initStuck.Running = RunningState{Present: true, StartedAt: fixedNow.Add(-30 * time.Minute)}
+	initStuck.RunningDuration = 30 * time.Minute
+
+	for name, in := range map[string]Inputs{
+		"probe":      probe,
+		"oom":        oom,
+		"app_crash":  appCrash,
+		"init_stuck": initStuck,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := Classify(in)
+			if len(got) == 0 {
+				t.Fatalf("fixture produced no diagnosis")
+			}
+			for _, d := range got {
+				for _, step := range d.NextSteps {
+					// The namespace must never be glued to whatever follows
+					// it: "-n production-c api" instead of "-n production -c api".
+					if strings.Contains(step, in.Namespace+"-") {
+						t.Errorf("cause %s: namespace is concatenated with the next flag:\n  %s", d.Cause, step)
+					}
+					// Likewise the pod name, which is always followed by a
+					// space or ends the command.
+					if strings.Contains(step, in.Pod+"-n ") {
+						t.Errorf("cause %s: pod name is concatenated with the next flag:\n  %s", d.Cause, step)
+					}
+					if strings.Contains(step, "  ") && !strings.Contains(step, "    #") {
+						t.Errorf("cause %s: double space outside the trailing comment:\n  %s", d.Cause, step)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestLivenessExecStepIsWellFormed pins the exact command the bug corrupted.
+func TestLivenessExecStepIsWellFormed(t *testing.T) {
+	in := baseInputs()
+	in.LastTermination = terminated(137, "Error")
+	in.RestartCount = 4
+	in.Liveness = ProbeSpec{Defined: true, FailureThreshold: 2, PeriodSeconds: 5, TimeoutSeconds: 1}
+	in.Events = []Event{
+		warning("Unhealthy", "Liveness probe failed: connection refused", 12),
+		warning("Killing", "Container api failed liveness probe, will be restarted", 3),
+	}
+
+	got := Classify(in)
+	if len(got) == 0 || got[0].Cause != CauseProbeLiveness {
+		t.Fatalf("Classify() = %v, want probe_liveness_failure first", causes(got))
+	}
+
+	var exec string
+	for _, s := range got[0].NextSteps {
+		if strings.Contains(s, "kubectl exec") {
+			exec = s
+			break
+		}
+	}
+	if exec == "" {
+		t.Fatal("probe_liveness_failure should suggest exec'ing the liveness endpoint")
+	}
+	if want := "kubectl exec api-7d9f8c6b4-abcde -n production -c api -- "; !strings.Contains(exec, want) {
+		t.Errorf("exec step is malformed:\n got: %s\nwant it to contain: %s", exec, want)
+	}
+}
