@@ -64,6 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go toolchain moved from 1.23.1 to a pinned 1.25.0, pulled forward by the
   security upgrades below.
 
+- Kubernetes dependency train upgraded from v0.31.4 to v0.35.2 (client-go,
+  api, apimachinery, cli-runtime); tests moved off the deprecated
+  `fake.NewSimpleClientset` to `fake.NewClientset`. v0.36+ is deliberately
+  held back via a Dependabot ignore rule: it requires Go 1.26, which
+  golangci-lint does not support yet.
+
 ### Security
 
 - Upgraded indirect dependencies `golang.org/x/text` (v0.16.0 → v0.40.0) and

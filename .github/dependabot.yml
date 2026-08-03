@@ -17,6 +17,13 @@ updates:
       golang-x:
         patterns:
           - "golang.org/x/*"
+    ignore:
+      # The k8s.io v0.36+ train requires Go 1.26, but golangci-lint has no
+      # go1.26-built release yet (latest v2.12.2 is built with go1.25), so
+      # adopting it would break the required Lint job. Hold the k8s train at
+      # v0.35.x; drop this ignore once golangci-lint supports Go 1.26.
+      - dependency-name: "k8s.io/*"
+        versions: [">=0.36.0"]
 
   - package-ecosystem: github-actions
     directory: /

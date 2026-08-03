@@ -122,7 +122,7 @@ func TestNewDiscardsNilWriter(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
 	cfg := dedupConfig(time.Hour, time.Hour)
 	cfg.clock = clk.Now
-	c, err := New(fake.NewSimpleClientset(), cfg, nil, nil)
+	c, err := New(fake.NewClientset(), cfg, nil, nil)
 	if err != nil {
 		t.Fatalf("watch.New: %v", err)
 	}

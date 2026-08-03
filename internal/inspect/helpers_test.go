@@ -33,7 +33,7 @@ const (
 // newClient builds a fake clientset seeded with the given objects.
 func newClient(t *testing.T, objs ...runtime.Object) *fake.Clientset {
 	t.Helper()
-	return fake.NewSimpleClientset(objs...)
+	return fake.NewClientset(objs...)
 }
 
 // appContainerSpec is a container spec with resources and a liveness probe
