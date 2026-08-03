@@ -4,7 +4,7 @@ Answers "why did this pod crash?" from live cluster state — no copy-pasting `d
 or `logs` output anywhere.
 
 [![CI](https://github.com/ryckakas/crashcause/actions/workflows/ci.yml/badge.svg)](https://github.com/ryckakas/crashcause/actions/workflows/ci.yml)
-![Go 1.23+](https://img.shields.io/badge/go-1.23%2B-00ADD8)
+![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 > **Status: feature-complete for v0.1.0, pre-first-release.**
@@ -123,7 +123,8 @@ Once a GitHub Release exists, prebuilt binaries will also be attached to it dire
 `deploy/krew/crashcause.yaml` manifest will point at those release archives instead of
 placeholders.
 
-Or build/install from source with Go 1.23+:
+Or build/install from source with Go 1.25+ (any Go ≥ 1.21 also works — the
+`go` command auto-downloads the toolchain pinned in `go.mod`):
 
 ```sh
 go install github.com/ryckakas/crashcause/cmd/crashcause@latest
@@ -456,7 +457,8 @@ Deliberately out of scope for the first release:
 
 ## Development
 
-Prerequisites to build: **Go 1.23.1**.
+Prerequisites to build: **Go 1.25** (pinned as `toolchain go1.25.0` in
+`go.mod`; any Go ≥ 1.21 auto-downloads it).
 
 Prerequisites for the full check loop (not required just to build): **golangci-lint v2**,
 **helm**, **kind**.
