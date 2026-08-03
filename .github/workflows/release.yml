@@ -6,12 +6,14 @@ on:
       - 'v*'
 
 permissions:
-  contents: write  # create the GitHub release and upload assets
-  packages: write  # push images/manifests to ghcr.io
-  id-token: write  # available for SBOM/attestation signing
+  contents: read
 
 jobs:
   goreleaser:
+    permissions:
+      contents: write  # create the GitHub release and upload assets
+      packages: write  # push images/manifests to ghcr.io
+      id-token: write  # available for SBOM/attestation signing
     name: GoReleaser
     runs-on: ubuntu-latest
     steps:
@@ -48,3 +50,48 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The chart is distributed as an OCI artifact rather than a classic HTTP
+  # chart repository: no gh-pages branch and no index.yaml to keep consistent,
+  # and it reuses the ghcr credentials this workflow already needs. Gated on
+  # the goreleaser job so a chart is never published pointing at an image tag
+  # that failed to build.
+  chart:
+    name: Publish Helm chart
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # push the chart artifact to ghcr.io
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: azure/setup-helm@v5.0.1
+        with:
+          version: v4.2.3
+
+      # The chart's appVersion is the image tag it defaults to, so a chart
+      # published from tag vX.Y.Z while pinned to some other appVersion would
+      # silently deploy the wrong binary. Fail the release instead.
+      - name: Verify chart appVersion matches the tag
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          app_version="$(helm show chart charts/crashcause \
+            | sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p')"
+          if [ "$app_version" != "$version" ]; then
+            echo "FAIL: tag is ${GITHUB_REF_NAME} (version ${version}) but chart appVersion is '${app_version}'"
+            exit 1
+          fi
+          echo "OK: chart appVersion ${app_version} matches tag ${GITHUB_REF_NAME}"
+
+      - name: Log in to ghcr.io
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Package and push chart
+        run: |
+          set -euo pipefail
+          helm package charts/crashcause -d dist
+          helm push dist/crashcause-*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts"

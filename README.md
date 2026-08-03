@@ -7,7 +7,7 @@ or `logs` output anywhere.
 ![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-> **Status: feature-complete for v0.1.0, pre-first-release.**
+> **Status: v0.1.0, the first public release.**
 >
 > - `crashcause inspect` and `crashcause watch` are both implemented end-to-end and
 >   unit-tested under `go test -race`: the full rule engine, human and `--output json`
@@ -17,13 +17,14 @@ or `logs` output anywhere.
 >   ServiceAccount, ServiceMonitor, NOTES.txt, and a chart README.
 > - A kind-based e2e harness (`hack/e2e.sh`) exercises every demo scenario in
 >   `examples/kind-demo/` against a live cluster and runs best-effort (non-gating) in CI.
-> - There is no GitHub Release yet, so there is no krew-index entry, no downloadable
->   binary, and no chart repository to `helm repo add`. Build from source, or install the
->   kubectl plugin / Helm chart from a local checkout of this repository. The tool has not
->   yet been exercised against real production clusters.
+> - Being pre-1.0, the CLI flags and chart values may still change between minor
+>   versions; the 17 cause codes are the stable part of the contract. The tool has not
+>   yet been exercised against real production clusters at scale.
+> - Not yet in the [krew index](https://github.com/kubernetes-sigs/krew-index), so
+>   `kubectl krew install crashcause` does not work yet — install from the released
+>   plugin manifest as shown under [Install](#install).
 >
-> Track progress via the milestones in [`CHANGELOG.md`](./CHANGELOG.md) and the CI badge
-> above.
+> See [`CHANGELOG.md`](./CHANGELOG.md) for what shipped.
 
 ## What it is, and why
 
@@ -110,18 +111,21 @@ scenario, and cleanup instructions.
 
 ### As a kubectl plugin (for `inspect`)
 
-No release has been published yet, so the krew-index path (`kubectl krew install
-crashcause`) is not available. Until then:
+crashcause is not in the krew index yet, so `kubectl krew install crashcause` does not
+work. Until the index entry lands, install from the plugin manifest published with each
+release — it points at that release's archives and verifies their sha256. (`--manifest-url`
+is krew's development-only install path; it works fine here, it just isn't how a
+published plugin is normally fetched.)
 
 ```sh
-# from a local checkout of this repository
-kubectl krew install --manifest=deploy/krew/crashcause.yaml
+kubectl krew install --manifest-url=https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause.yaml
 ```
 
-Once a GitHub Release exists, prebuilt binaries will also be attached to it directly
-(`https://github.com/ryckakas/crashcause/releases`) for manual download, and the
-`deploy/krew/crashcause.yaml` manifest will point at those release archives instead of
-placeholders.
+Prebuilt `linux`/`darwin` `amd64`/`arm64` archives (plus `checksums.txt` and SBOMs) are
+attached to every release at
+[github.com/ryckakas/crashcause/releases](https://github.com/ryckakas/crashcause/releases)
+if you would rather drop the binary on your `PATH` yourself — name it `kubectl-crashcause`
+to get the `kubectl crashcause` subcommand form without krew.
 
 Or build/install from source with Go 1.25+ (any Go ≥ 1.21 also works — the
 `go` command auto-downloads the toolchain pinned in `go.mod`):
@@ -135,7 +139,17 @@ go build -o bin/crashcause ./cmd/crashcause
 
 ### In-cluster `watch` mode (Helm)
 
-There is no published chart repository yet, so install from the checkout:
+The chart is published as an OCI artifact to GitHub Container Registry:
+
+```sh
+helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
+  --version 0.1.0 -n crashcause --create-namespace \
+  -f my-values.yaml
+```
+
+`helm show values oci://ghcr.io/ryckakas/charts/crashcause --version 0.1.0` prints the
+full default values. To install from a checkout instead — for local development, or to
+try chart changes before they are released:
 
 ```sh
 helm install crashcause ./charts/crashcause -n crashcause --create-namespace \

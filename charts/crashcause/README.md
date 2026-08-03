@@ -21,20 +21,26 @@ credentials and needs no in-cluster component at all.
 
 ## Install / uninstall
 
-There is no published chart repository yet (see
-[Known limitations](#known-limitations-in-010)) — install from a checkout of
-this repository.
+The chart is published as an OCI artifact to GitHub Container Registry. Helm
+3.8+ speaks OCI natively, so there is no `helm repo add` step:
 
 ```bash
-helm install crashcause ./charts/crashcause -n crashcause --create-namespace
+helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
+  --version 0.1.0 -n crashcause --create-namespace
 ```
 
 Apply your own overrides with a values file:
 
 ```bash
-helm install crashcause ./charts/crashcause -n crashcause --create-namespace \
+helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
+  --version 0.1.0 -n crashcause --create-namespace \
   -f my-values.yaml
 ```
+
+Every example below uses the local chart path (`./charts/crashcause`), which
+works from a checkout and is the right form when trying out unreleased chart
+changes; substitute the `oci://` reference plus `--version` to install a
+published chart instead.
 
 Uninstall:
 
@@ -402,8 +408,12 @@ chart:
 - **Dedup state is in-memory only.** A controller restart (rollout, crash,
   node drain) forgets all dedup keys, so each currently-active crash key is
   re-emitted once after restart.
-- **The chart is not published to a chart repository yet.** Install from a
-  checked-out copy of this repository, as shown above.
+- **The chart is published only as an OCI artifact**, not as a classic
+  `helm repo add`-able HTTP repository, and it is therefore not indexed on
+  Artifact Hub. Helm 3.8+ can install it directly, as shown above.
+- **The chart version tracks the crashcause release.** A chart-only fix is
+  published by cutting a new crashcause tag, because the release job refuses
+  to push a chart whose `appVersion` does not match the tag.
 
 ## Uninstall
 

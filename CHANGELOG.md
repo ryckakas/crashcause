@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-03
+
+First public release.
+
 ### Added
 
 - `--ai-model` flag on `inspect` and `watch` (and `ai.model` in the Helm
@@ -137,3 +141,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drain warning.
 - Events are now attributed to their container, preventing cross-container
   misdiagnosis in multi-container pods.
+
+[Unreleased]: https://github.com/ryckakas/crashcause/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ryckakas/crashcause/releases/tag/v0.1.0
