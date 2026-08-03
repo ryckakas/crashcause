@@ -3,6 +3,7 @@ package sinks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,6 +48,11 @@ type lokiTestServer struct {
 	pushes chan lokiCapture
 	status atomic.Int64
 	count  atomic.Int64
+	// closing releases any handler parked on the caller's gate. Without it a
+	// gated test that fails an assertion never reaches its own close(gate),
+	// httptest's Close waits forever on the in-flight request, and a fast
+	// failure turns into a ten-minute test timeout.
+	closing chan struct{}
 }
 
 // lokiNewTestServer starts an httptest server that decodes each push and
@@ -54,7 +60,10 @@ type lokiTestServer struct {
 // until it is closed (used to wedge the flusher and force buffer overflow).
 func lokiNewTestServer(t *testing.T, gate <-chan struct{}) *lokiTestServer {
 	t.Helper()
-	ts := &lokiTestServer{pushes: make(chan lokiCapture, 256)}
+	ts := &lokiTestServer{
+		pushes:  make(chan lokiCapture, 256),
+		closing: make(chan struct{}),
+	}
 	ts.status.Store(http.StatusNoContent)
 
 	ts.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -81,11 +90,17 @@ func lokiNewTestServer(t *testing.T, gate <-chan struct{}) *lokiTestServer {
 		default:
 		}
 		if gate != nil {
-			<-gate
+			select {
+			case <-gate:
+			case <-ts.closing:
+			}
 		}
 		w.WriteHeader(int(ts.status.Load()))
 	}))
+	// LIFO: this runs BEFORE srv.Close below, so parked handlers are released
+	// first and Close never waits on an in-flight request.
 	t.Cleanup(ts.srv.Close)
+	t.Cleanup(func() { close(ts.closing) })
 	return ts
 }
 
@@ -432,20 +447,35 @@ func TestLokiEmitNeverBlocksAndDropsOnFullBuffer(t *testing.T) {
 		t.Fatalf("Emit: %v", err)
 	}
 
+	// The property under test is that Emit returns instead of waiting for the
+	// wedged flusher — which stays wedged for the rest of the test, so a
+	// blocking Emit would hang indefinitely. Assert that with a watchdog on
+	// the whole batch rather than a per-call latency bound: a non-blocking
+	// channel send can still be descheduled for 100ms+ when the race detector
+	// and a parallel package run saturate every core, which made the old
+	// per-call assertion flaky (and, because it fired before close(gate), it
+	// deadlocked cleanup and turned a failure into a 10-minute timeout).
 	const total = 1000
-	var worst time.Duration
-	for i := 0; i < total; i++ {
-		start := time.Now()
-		if err := s.Emit(context.Background(), lokiTestDiagnosis("prod", engine.CauseOOMKilled, time.Now())); err != nil {
-			t.Fatalf("Emit(%d): %v", i, err)
+	emitted := make(chan error, 1)
+	go func() {
+		for i := 0; i < total; i++ {
+			if err := s.Emit(context.Background(), lokiTestDiagnosis("prod", engine.CauseOOMKilled, time.Now())); err != nil {
+				emitted <- fmt.Errorf("Emit(%d): %w", i, err)
+				return
+			}
 		}
-		if elapsed := time.Since(start); elapsed > worst {
-			worst = elapsed
-		}
-	}
+		emitted <- nil
+	}()
 
-	if worst >= 100*time.Millisecond {
-		t.Fatalf("slowest Emit took %s; Emit must never block on a full buffer", worst)
+	select {
+	case err := <-emitted:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(20 * time.Second):
+		// Comfortably beyond any scheduler stall, and far below the 10s
+		// push Timeout x the number of wedged pushes a blocking Emit implies.
+		t.Fatalf("Emit blocked: %d emits did not finish while the flusher was wedged", total)
 	}
 	if got := s.Dropped(); got == 0 {
 		t.Fatalf("Dropped() = 0, want > 0 after emitting %d entries into a 100-slot buffer", total)

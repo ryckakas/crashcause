@@ -1086,46 +1086,55 @@ func TestHTConfigErrorContext(t *testing.T) {
 
 func TestHTProbeBudget(t *testing.T) {
 	t.Run("undefined probe", func(t *testing.T) {
-		_, _, ok := probeBudget("liveness", ProbeSpec{})
+		_, ok := probeBudget("liveness", ProbeSpec{})
 		if ok {
 			t.Error("probeBudget(undefined) ok = true, want false")
 		}
 	})
 	t.Run("zero failure threshold", func(t *testing.T) {
-		_, _, ok := probeBudget("liveness", ProbeSpec{Defined: true, FailureThreshold: 0, PeriodSeconds: 5})
+		_, ok := probeBudget("liveness", ProbeSpec{Defined: true, FailureThreshold: 0, PeriodSeconds: 5})
 		if ok {
 			t.Error("probeBudget(zero failureThreshold) ok = true, want false")
 		}
 	})
 	t.Run("zero period seconds", func(t *testing.T) {
-		_, _, ok := probeBudget("liveness", ProbeSpec{Defined: true, FailureThreshold: 3, PeriodSeconds: 0})
+		_, ok := probeBudget("liveness", ProbeSpec{Defined: true, FailureThreshold: 3, PeriodSeconds: 0})
 		if ok {
 			t.Error("probeBudget(zero periodSeconds) ok = true, want false")
 		}
 	})
 	t.Run("basic budget without extras", func(t *testing.T) {
-		line, budget, ok := probeBudget("liveness", ProbeSpec{Defined: true, FailureThreshold: 3, PeriodSeconds: 10})
+		b, ok := probeBudget("liveness", ProbeSpec{Defined: true, FailureThreshold: 3, PeriodSeconds: 10})
 		if !ok {
 			t.Fatal("probeBudget() ok = false, want true")
 		}
-		if budget != 30*time.Second {
-			t.Errorf("budget = %v, want 30s", budget)
+		if b.probing != 30*time.Second {
+			t.Errorf("probing = %v, want 30s", b.probing)
 		}
+		if b.total != 30*time.Second {
+			t.Errorf("total = %v, want 30s when there is no initial delay", b.total)
+		}
+		line := b.line
 		want := "liveness probe config: failureThreshold=3 x periodSeconds=10 = 30s before the kubelet acts"
 		if line != want {
 			t.Errorf("line = %q, want %q", line, want)
 		}
 	})
 	t.Run("with initial delay and timeout", func(t *testing.T) {
-		line, budget, ok := probeBudget("startup", ProbeSpec{
+		b, ok := probeBudget("startup", ProbeSpec{
 			Defined: true, FailureThreshold: 3, PeriodSeconds: 10, InitialDelaySeconds: 5, TimeoutSeconds: 2,
 		})
 		if !ok {
 			t.Fatal("probeBudget() ok = false, want true")
 		}
-		if budget != 35*time.Second {
-			t.Errorf("budget = %v, want 35s (30s + 5s initial delay)", budget)
+		// probing must EXCLUDE initialDelaySeconds: no probe runs during it.
+		if b.probing != 30*time.Second {
+			t.Errorf("probing = %v, want 30s (failureThreshold x periodSeconds only)", b.probing)
 		}
+		if b.total != 35*time.Second {
+			t.Errorf("total = %v, want 35s (30s + 5s initial delay)", b.total)
+		}
+		line := b.line
 		want := "startup probe config: failureThreshold=3 x periodSeconds=10 = 30s before the kubelet acts" +
 			" (plus initialDelaySeconds=5), timeoutSeconds=2"
 		if line != want {
@@ -1616,4 +1625,125 @@ func htContainsSubstr(lines []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestHTScanLogTailDNSAndPythonPatterns covers the two patterns added after a
+// live-cluster run produced "no known crash pattern matched the log tail" for
+// a Python service whose DNS lookup failed — the single most common shape of
+// dependency failure in a cluster.
+func TestHTScanLogTailDNSAndPythonPatterns(t *testing.T) {
+	dnsCases := map[string]string{
+		"python gaierror": "socket.gaierror: [Errno -2] Name does not resolve",
+		"glibc":           "getaddrinfo: Name or service not known",
+		"go":              `dial tcp: lookup db.internal: no such host`,
+		"node":            "Error: getaddrinfo EAI_NONAME db.internal",
+		"libpq":           `could not translate host name "db.internal" to address`,
+	}
+	for name, line := range dnsCases {
+		t.Run("dns/"+name, func(t *testing.T) {
+			hints := scanLogTail([]string{"[info] starting", line})
+			if !hasHint(hints, "dns resolution failure") {
+				t.Errorf("scanLogTail(%q) produced %v, want a dns resolution failure hint", line, labels(hints))
+			}
+		})
+	}
+
+	t.Run("python traceback", func(t *testing.T) {
+		lines := []string{
+			"Traceback (most recent call last):",
+			`  File "/app/main.py", line 12, in <module>`,
+			"KeyError: 'DATABASE_URL'",
+		}
+		if hints := scanLogTail(lines); !hasHint(hints, "python traceback") {
+			t.Errorf("scanLogTail() = %v, want a python traceback hint", labels(hints))
+		}
+	})
+
+	t.Run("specific failure outranks the generic traceback", func(t *testing.T) {
+		// A traceback almost always wraps something more specific. The
+		// specific hint must come first, because that is the actionable one.
+		lines := []string{
+			"Traceback (most recent call last):",
+			`  File "/app/db.py", line 40, in connect`,
+			"socket.gaierror: [Errno -2] Name does not resolve",
+		}
+		hints := scanLogTail(lines)
+		if !hasHint(hints, "python traceback") || !hasHint(hints, "dns resolution failure") {
+			t.Fatalf("expected both hints, got %v", labels(hints))
+		}
+		if hints[0].Label != "dns resolution failure" {
+			t.Errorf("hints[0] = %q, want the dns hint before the generic traceback (%v)", hints[0].Label, labels(hints))
+		}
+	})
+
+	t.Run("dns is not confused with connection refused", func(t *testing.T) {
+		hints := scanLogTail([]string{"dial tcp 10.2.3.4:5432: connect: connection refused"})
+		if hasHint(hints, "dns resolution failure") {
+			t.Errorf("a refused connection resolved fine; it must not report a DNS failure: %v", labels(hints))
+		}
+		if !hasHint(hints, "connection refused") {
+			t.Errorf("scanLogTail() = %v, want a connection refused hint", labels(hints))
+		}
+	})
+}
+
+func hasHint(hints []logHint, label string) bool {
+	for _, h := range hints {
+		if h.Label == label {
+			return true
+		}
+	}
+	return false
+}
+
+func labels(hints []logHint) []string {
+	out := make([]string, 0, len(hints))
+	for _, h := range hints {
+		out = append(out, h.Label)
+	}
+	return out
+}
+
+// TestHTFindLineQuotesTheMostSpecificNeedle pins the evidence-selection rule:
+// a pattern's needle order decides which line is quoted, so a stack trace is
+// evidenced by its error line rather than by an intermediate frame.
+func TestHTFindLineQuotesTheMostSpecificNeedle(t *testing.T) {
+	lines := []string{
+		"Traceback (most recent call last):",
+		`  File "/usr/local/lib/python3.12/socket.py", line 841, in create_connection`,
+		"    for res in getaddrinfo(host, port, 0, SOCK_STREAM):",
+		`  File "/usr/local/lib/python3.12/socket.py", line 978, in getaddrinfo`,
+		"socket.gaierror: [Errno -2] Name does not resolve",
+	}
+	hints := scanLogTail(lines)
+	var dns logHint
+	for _, h := range hints {
+		if h.Label == "dns resolution failure" {
+			dns = h
+		}
+	}
+	if dns.Label == "" {
+		t.Fatalf("expected a dns hint, got %v", labels(hints))
+	}
+	if !strings.Contains(dns.Line, "Name does not resolve") {
+		t.Errorf("quoted line = %q, want the gaierror line rather than a stack frame", dns.Line)
+	}
+}
+
+// TestHTFindLinePrefersTheLastMatch: the decisive line of a crash log is at
+// its end (a retry loop logs the same failure repeatedly; the final one is
+// the fatal one).
+func TestHTFindLinePrefersTheLastMatch(t *testing.T) {
+	lines := []string{
+		"connection refused (attempt 1/3), retrying",
+		"connection refused (attempt 2/3), retrying",
+		"connection refused (attempt 3/3), giving up",
+	}
+	got, ok := findLine(lines, logPattern{needles: []string{"connection refused"}})
+	if !ok {
+		t.Fatal("findLine() found nothing")
+	}
+	if !strings.Contains(got, "giving up") {
+		t.Errorf("findLine() = %q, want the final attempt", got)
+	}
 }

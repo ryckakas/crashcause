@@ -172,22 +172,39 @@ func observedStartupWindow(in Inputs) (time.Duration, bool) {
 	return 0, false
 }
 
+// probeBudgets separates the two durations a probe implies. Conflating them
+// produces false arithmetic in reports: initialDelaySeconds elapses before any
+// probe runs, so it belongs in "time since the container started" but never in
+// "failureThreshold x periodSeconds".
+type probeBudgets struct {
+	// line is the evidence line describing the probe's configuration.
+	line string
+	// probing is failureThreshold x periodSeconds: how long the kubelet
+	// tolerates FAILING probes before acting.
+	probing time.Duration
+	// total is probing plus initialDelaySeconds: how long after container
+	// start the kubelet acts, at the earliest.
+	total time.Duration
+}
+
 // probeBudget renders "failureThreshold=3 x periodSeconds=5 = 15s" for a probe.
-func probeBudget(name string, p ProbeSpec) (string, time.Duration, bool) {
+func probeBudget(name string, p ProbeSpec) (probeBudgets, bool) {
 	if !p.Defined || p.FailureThreshold <= 0 || p.PeriodSeconds <= 0 {
-		return "", 0, false
+		return probeBudgets{}, false
 	}
-	budget := time.Duration(p.FailureThreshold) * time.Duration(p.PeriodSeconds) * time.Second
-	line := fmt.Sprintf("%s probe config: failureThreshold=%d x periodSeconds=%d = %s before the kubelet acts",
-		name, p.FailureThreshold, p.PeriodSeconds, formatDuration(budget))
+	b := probeBudgets{}
+	b.probing = time.Duration(p.FailureThreshold) * time.Duration(p.PeriodSeconds) * time.Second
+	b.total = b.probing
+	b.line = fmt.Sprintf("%s probe config: failureThreshold=%d x periodSeconds=%d = %s before the kubelet acts",
+		name, p.FailureThreshold, p.PeriodSeconds, formatDuration(b.probing))
 	if p.InitialDelaySeconds > 0 {
-		line += fmt.Sprintf(" (plus initialDelaySeconds=%d)", p.InitialDelaySeconds)
-		budget += time.Duration(p.InitialDelaySeconds) * time.Second
+		b.line += fmt.Sprintf(" (plus initialDelaySeconds=%d)", p.InitialDelaySeconds)
+		b.total += time.Duration(p.InitialDelaySeconds) * time.Second
 	}
 	if p.TimeoutSeconds > 0 {
-		line += fmt.Sprintf(", timeoutSeconds=%d", p.TimeoutSeconds)
+		b.line += fmt.Sprintf(", timeoutSeconds=%d", p.TimeoutSeconds)
 	}
-	return line, budget, true
+	return b, true
 }
 
 // sortedResourceEvidence renders a resource map deterministically.
@@ -412,10 +429,15 @@ func probeLivenessRule() Rule {
 				"The kubelet restarted %s because its liveness probe kept failing (%d recorded Unhealthy events). "+
 					"The container process was alive but did not answer the liveness probe, so Kubernetes killed it on purpose.",
 				containerRef(in), failures)
-			budgetLine, budget, hasBudget := probeBudget("liveness", in.Liveness)
+			budgets, hasBudget := probeBudget("liveness", in.Liveness)
 			if hasBudget {
-				expl += fmt.Sprintf(" With failureThreshold=%d and periodSeconds=%d the container is killed after roughly %s of failing probes.",
-					in.Liveness.FailureThreshold, in.Liveness.PeriodSeconds, formatDuration(budget))
+				expl += fmt.Sprintf(" With failureThreshold=%d and periodSeconds=%d the container is killed after roughly %s of failing probes",
+					in.Liveness.FailureThreshold, in.Liveness.PeriodSeconds, formatDuration(budgets.probing))
+				if budgets.total > budgets.probing {
+					expl += fmt.Sprintf(", i.e. about %s after it starts (initialDelaySeconds=%d runs no probes at all)",
+						formatDuration(budgets.total), in.Liveness.InitialDelaySeconds)
+				}
+				expl += "."
 			}
 			d.Explanation = expl
 
@@ -430,22 +452,22 @@ func probeLivenessRule() Rule {
 			}
 			appendEvidence(d, fmt.Sprintf("observed liveness probe failures: %d", failures))
 			if hasBudget {
-				appendEvidence(d, budgetLine)
+				appendEvidence(d, budgets.line)
 			} else {
 				appendEvidence(d, "liveness probe configuration was not collected")
 			}
 			appendEvidence(d, restartEvidence(in)...)
 			appendEvidence(d, terminationEvidence(effectiveTermination(in))...)
 			if in.Startup.Defined {
-				if line, _, okB := probeBudget("startup", in.Startup); okB {
-					appendEvidence(d, line)
+				if sb, okB := probeBudget("startup", in.Startup); okB {
+					appendEvidence(d, sb.line)
 				}
 			} else {
 				appendEvidence(d, "no startup probe is defined, so the liveness probe also governs slow startups")
 			}
 			appendSteps(d,
 				"Call the liveness endpoint yourself: kubectl exec "+podRef(in)+" "+nsFlag(in)+
-					strings.TrimPrefix(containerFlag(in), " ")+" -- wget -qO- http://localhost:<port><path>",
+					containerFlag(in)+" -- wget -qO- http://localhost:<port><path>",
 				"Check whether the probe is too strict: raise failureThreshold / periodSeconds / timeoutSeconds",
 				"If the app is slow to start, add a startupProbe instead of a long initialDelaySeconds on liveness",
 				"Make the liveness endpoint cheap and dependency-free: it must not call the database or downstream services",
@@ -480,20 +502,23 @@ func probeStartupRule() Rule {
 					"before the application became ready to serve.",
 				capitalizeFirst(containerRef(in)), failures)
 
-			line, budget, hasBudget := probeBudget("startup", in.Startup)
+			budgets, hasBudget := probeBudget("startup", in.Startup)
 			observed, hasObserved := observedStartupWindow(in)
 			if hasBudget && hasObserved {
-				if observed <= budget+2*time.Second {
+				// observed is measured from container start, so it is compared
+				// against the total (probing plus initialDelaySeconds), while
+				// the quoted arithmetic must show the probing budget alone.
+				if observed <= budgets.total+2*time.Second {
 					expl += fmt.Sprintf(" The startup budget is failureThreshold=%d x periodSeconds=%d = %s and the container "+
 						"only ran %s before being killed, so the budget is too tight for this application's startup time.",
-						in.Startup.FailureThreshold, in.Startup.PeriodSeconds, formatDuration(budget), formatDuration(observed))
+						in.Startup.FailureThreshold, in.Startup.PeriodSeconds, formatDuration(budgets.probing), formatDuration(observed))
 				} else {
 					expl += fmt.Sprintf(" The startup budget is %s; the container ran %s, so it was still failing its probe "+
-						"well past the budget.", formatDuration(budget), formatDuration(observed))
+						"well past the budget.", formatDuration(budgets.probing), formatDuration(observed))
 				}
 			} else if hasBudget {
 				expl += fmt.Sprintf(" The startup budget is failureThreshold=%d x periodSeconds=%d = %s.",
-					in.Startup.FailureThreshold, in.Startup.PeriodSeconds, formatDuration(budget))
+					in.Startup.FailureThreshold, in.Startup.PeriodSeconds, formatDuration(budgets.probing))
 			}
 			d.Explanation = expl
 
@@ -507,7 +532,7 @@ func probeStartupRule() Rule {
 				appendEvidence(d, "startup failures "+t)
 			}
 			if hasBudget {
-				appendEvidence(d, line)
+				appendEvidence(d, budgets.line)
 			} else {
 				appendEvidence(d, "startup probe configuration was not collected")
 			}

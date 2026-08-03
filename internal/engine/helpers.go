@@ -660,13 +660,34 @@ func logPatterns() []logPattern {
 		},
 		{
 			label: "node module not found", note: "Node.js could not resolve a required module",
-			needles: []string{"MODULE_NOT_FOUND", "Cannot find module"},
+			// "Cannot find module" first: it names WHICH module, whereas the
+			// MODULE_NOT_FOUND error code line does not. Needle order decides
+			// which line findLine quotes as evidence.
+			needles: []string{"Cannot find module", "MODULE_NOT_FOUND"},
 			steps:   []string{"Verify the image ships node_modules for the target platform and that the build stage ran npm/yarn install"},
 		},
 		{
 			label: "java class not found", note: "the JVM could not load a class at runtime (classpath problem)",
 			needles: []string{"ClassNotFoundException", "NoClassDefFoundError"},
 			steps:   []string{"Check the image's classpath / shaded jar contents"},
+		},
+		{
+			label: "dns resolution failure",
+			note:  "the process could not RESOLVE a hostname - the name never turned into an address, so nothing was ever dialed",
+			needles: []string{
+				"Name does not resolve",     // glibc/musl getaddrinfo, Python socket.gaierror
+				"Name or service not known", // glibc getaddrinfo
+				"no such host",              // Go net package
+				"EAI_NONAME", "getaddrinfo", // Node.js / generic resolver
+				"nodename nor servname",         // macOS/BSD resolver
+				"could not translate host name", // libpq
+			},
+			steps: []string{
+				"Check the hostname for a typo, and whether it needs a namespace suffix: <service>.<namespace>.svc.cluster.local",
+				"Verify the Service exists in the namespace you expect: kubectl get svc -A | grep <name>",
+				"A name that resolves from your laptop but not in-cluster usually means an external DNS record the cluster's resolver cannot see",
+				"Check the pod's dnsPolicy and any custom dnsConfig",
+			},
 		},
 		{
 			label: "connection refused", note: "the process could not reach a dependency (connection refused)",
@@ -695,6 +716,18 @@ func logPatterns() []logPattern {
 			steps:   []string{"Check for a CPU-architecture mismatch (arm64 image on amd64 nodes or vice versa) or a native library crash"},
 		},
 		{
+			label: "python traceback",
+			note:  "an unhandled Python exception terminated the process; the LAST line of the traceback names the exception",
+			// Deliberately late in the list: a traceback usually wraps a more
+			// specific failure (a DNS error, a refused connection), and that
+			// more specific hint is the useful one. This catches the rest.
+			needles: []string{"Traceback (most recent call last)"}, caseSensit: true,
+			steps: []string{
+				"Read the final line of the traceback: it names the exception type and message",
+				"The frame directly above it is the application code that raised, rather than library internals",
+			},
+		},
+		{
 			label: "fatal log line", note: "the application logged a fatal error immediately before exiting",
 			needles: []string{"FATAL", "Fatal"}, caseSensit: true,
 			steps: nil,
@@ -714,18 +747,33 @@ func scanLogTail(lines []string) []logHint {
 	return hints
 }
 
+// findLine returns the log line that best evidences p.
+//
+// Needles are iterated OUTERMOST, so a pattern's needle order (most specific
+// first) decides which line is quoted. Scanning lines first would quote
+// whichever line happens to appear earliest, which in a stack trace is an
+// intermediate frame rather than the error: a Python DNS failure would be
+// evidenced by "for res in getaddrinfo(...)" instead of the "Name does not
+// resolve" line that actually says what went wrong.
+//
+// Within a single needle the LAST match wins, because the decisive line of a
+// crash log is at its end, not its start.
 func findLine(lines []string, p logPattern) (string, bool) {
-	for _, l := range lines {
-		for _, n := range p.needles {
+	for _, n := range p.needles {
+		match, found := "", false
+		for _, l := range lines {
 			if p.caseSensit {
 				if strings.Contains(l, n) {
-					return strings.TrimSpace(l), true
+					match, found = l, true
 				}
 				continue
 			}
 			if containsFold(l, n) {
-				return strings.TrimSpace(l), true
+				match, found = l, true
 			}
+		}
+		if found {
+			return strings.TrimSpace(match), true
 		}
 	}
 	return "", false
