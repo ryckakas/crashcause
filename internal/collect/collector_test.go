@@ -870,6 +870,38 @@ func TestEventTimeFallback(t *testing.T) {
 	}
 }
 
+func TestEventContainerAttribution(t *testing.T) {
+	pod := crashedPod(t)
+	app := podEvent("ev-app", corev1.EventTypeWarning, "Unhealthy", "Liveness probe failed", 3, fixedNow.Add(-4*time.Minute))
+	app.InvolvedObject.FieldPath = "spec.containers{app}"
+	initC := podEvent("ev-init", corev1.EventTypeWarning, "BackOff", "Back-off restarting failed container", 2, fixedNow.Add(-3*time.Minute))
+	initC.InvolvedObject.FieldPath = "spec.initContainers{init-db}"
+	podScoped := podEvent("ev-pod", corev1.EventTypeWarning, "FailedScheduling", "0/3 nodes are available", 1, fixedNow.Add(-2*time.Minute))
+	odd := podEvent("ev-odd", corev1.EventTypeWarning, "FailedMount", "MountVolume.SetUp failed", 1, fixedNow.Add(-1*time.Minute))
+	odd.InvolvedObject.FieldPath = "spec.volumes{data}"
+	cs := newClient(t, pod, app, initC, podScoped, odd)
+	c := New(cs, testOptions())
+
+	got, err := c.ForPod(context.Background(), testNamespace, testPodName, "")
+	if err != nil {
+		t.Fatalf("ForPod: %v", err)
+	}
+	if len(got[0].Events) != 4 {
+		t.Fatalf("got %d events, want 4: %+v", len(got[0].Events), got[0].Events)
+	}
+	want := map[string]string{
+		"Unhealthy":        "app",
+		"BackOff":          "init-db",
+		"FailedScheduling": "",
+		"FailedMount":      "",
+	}
+	for _, ev := range got[0].Events {
+		if ev.Container != want[ev.Reason] {
+			t.Errorf("event %s: Container = %q, want %q", ev.Reason, ev.Container, want[ev.Reason])
+		}
+	}
+}
+
 // --- options and small units -----------------------------------------------------------
 
 func TestDefaultOptions(t *testing.T) {

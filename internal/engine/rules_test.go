@@ -185,6 +185,70 @@ func TestRtProbeLivenessNoMatchForReadinessOnly(t *testing.T) {
 	}
 }
 
+func TestRtProbeLivenessBudgetExcludesInitialDelay(t *testing.T) {
+	in := baseInputs()
+	in.RestartCount = 4
+	in.Liveness = ProbeSpec{Defined: true, FailureThreshold: 7, PeriodSeconds: 10, InitialDelaySeconds: 15}
+	in.Events = []Event{
+		warning("Unhealthy", "Liveness probe failed: HTTP probe failed with statuscode: 500", 14),
+		warning("Killing", "Container api failed liveness probe, will be restarted", 2),
+	}
+
+	d := diagnosisFor(t, Classify(in), CauseProbeLiveness)
+	if !strings.Contains(d.Explanation, "killed after roughly 1m10s of failing probes") {
+		t.Errorf("explanation must quote failureThreshold x periodSeconds = 1m10s, got %q", d.Explanation)
+	}
+	if strings.Contains(d.Explanation, "1m25s of failing probes") {
+		t.Errorf("explanation counts initialDelaySeconds as failing-probe time, got %q", d.Explanation)
+	}
+	if !strings.Contains(d.Explanation, "about 1m25s after it starts") {
+		t.Errorf("explanation must state the delay-inclusive total separately, got %q", d.Explanation)
+	}
+	if !evidenceContains(d, "failureThreshold=7 x periodSeconds=10 = 1m10s before the kubelet acts (plus initialDelaySeconds=15)") {
+		t.Errorf("evidence must carry the probing budget with the delay called out, got %v", d.Evidence)
+	}
+}
+
+func TestRtProbeEventsFromAnotherContainerDoNotContaminate(t *testing.T) {
+	// Container "api" exited 1 on its own; the sidecar's liveness failures
+	// must not reattribute that crash to a probe kill.
+	unhealthy := warning("Unhealthy", "Liveness probe failed: HTTP probe failed with statuscode: 503", 6)
+	unhealthy.Container = "sidecar"
+	killing := warning("Killing", "Container sidecar failed liveness probe, will be restarted", 2)
+	killing.Container = "sidecar"
+
+	in := baseInputs()
+	in.RestartCount = 2
+	in.LastTermination = terminated(1, "Error")
+	in.Liveness = ProbeSpec{Defined: true, FailureThreshold: 3, PeriodSeconds: 10}
+	in.Events = []Event{unhealthy, killing}
+
+	got := Classify(in)
+	if hasCause(got, CauseProbeLiveness) {
+		t.Fatalf("another container's probe events must not fire probe_liveness_failure, got %v", causes(got))
+	}
+	diagnosisFor(t, got, CauseAppExitNonzero)
+
+	// Control: the same events attributed to the diagnosed container (or not
+	// attributed at all) keep the probe diagnosis and suppress app_exit_nonzero.
+	for name, container := range map[string]string{"same container": "api", "unattributed": ""} {
+		t.Run(name, func(t *testing.T) {
+			ctrl := in
+			u, k := unhealthy, killing
+			u.Container = container
+			k.Container = container
+			ctrl.Events = []Event{u, k}
+			ctrlGot := Classify(ctrl)
+			if !hasCause(ctrlGot, CauseProbeLiveness) {
+				t.Fatalf("control case failed: probe_liveness_failure did not fire, got %v", causes(ctrlGot))
+			}
+			if hasCause(ctrlGot, CauseAppExitNonzero) {
+				t.Fatalf("app_exit_nonzero must stand down for a probe kill, got %v", causes(ctrlGot))
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // probe_startup_failure
 // ---------------------------------------------------------------------------
@@ -287,6 +351,39 @@ func TestRtProbeStartupWindowFromRunningDuration(t *testing.T) {
 	}
 	if !strings.Contains(d.Explanation, "too tight") {
 		t.Errorf("explanation must say the budget is too tight, got %q", d.Explanation)
+	}
+}
+
+func TestRtProbeStartupBudgetExcludesInitialDelay(t *testing.T) {
+	in := baseInputs()
+	// Probing budget 10s, delay-inclusive total 20s.
+	in.Startup = ProbeSpec{Defined: true, FailureThreshold: 2, PeriodSeconds: 5, InitialDelaySeconds: 10}
+	in.LastTermination = TerminationState{
+		Present:    true,
+		ExitCode:   1,
+		Reason:     "Error",
+		StartedAt:  fixedNow.Add(-60 * time.Second),
+		FinishedAt: fixedNow.Add(-42 * time.Second), // 18s window: within the total, past the probing budget
+	}
+	in.Events = []Event{
+		warning("Unhealthy", "Startup probe failed: connection refused", 2),
+		warning("Killing", "Container api failed startup probe, will be restarted", 1),
+	}
+
+	d := diagnosisFor(t, Classify(in), CauseProbeStartup)
+	if !strings.Contains(d.Explanation, "failureThreshold=2 x periodSeconds=5 = 10s") {
+		t.Errorf("explanation must quote the pure probing product (10s), got %q", d.Explanation)
+	}
+	if strings.Contains(d.Explanation, "= 20s") {
+		t.Errorf("explanation folds initialDelaySeconds into the quoted product, got %q", d.Explanation)
+	}
+	// The observed 18s window is measured from container start, so the
+	// too-tight comparison must use the delay-inclusive total (20s).
+	if !strings.Contains(d.Explanation, "too tight") {
+		t.Errorf("explanation must say the budget is too tight, got %q", d.Explanation)
+	}
+	if !evidenceContains(d, "failureThreshold=2 x periodSeconds=5 = 10s before the kubelet acts (plus initialDelaySeconds=10)") {
+		t.Errorf("evidence must cite the probing budget with the delay called out, got %v", d.Evidence)
 	}
 }
 

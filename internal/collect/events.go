@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -50,6 +51,7 @@ func (c *Collector) collectEvents(ctx context.Context, pod *corev1.Pod) []engine
 			Type:      ev.Type,
 			Reason:    ev.Reason,
 			Message:   ev.Message,
+			Container: fieldPathContainer(ev.InvolvedObject.FieldPath),
 			Count:     ev.Count,
 			FirstSeen: eventTime(ev.FirstTimestamp, ev),
 			LastSeen:  eventTime(ev.LastTimestamp, ev),
@@ -67,6 +69,19 @@ func (c *Collector) collectEvents(ctx context.Context, pod *corev1.Pod) []engine
 		return a.Message < b.Message
 	})
 	return out
+}
+
+// fieldPathContainer extracts the container name from an event's
+// involvedObject.fieldPath ("spec.containers{api}" -> "api"). It returns ""
+// for anything that is not container-scoped, so consumers can fail open when
+// the server omitted the attribution.
+func fieldPathContainer(fieldPath string) string {
+	for _, prefix := range []string{"spec.containers{", "spec.initContainers{"} {
+		if strings.HasPrefix(fieldPath, prefix) && strings.HasSuffix(fieldPath, "}") {
+			return strings.TrimSuffix(strings.TrimPrefix(fieldPath, prefix), "}")
+		}
+	}
+	return ""
 }
 
 // eventTime falls back to the newer EventTime field when the legacy

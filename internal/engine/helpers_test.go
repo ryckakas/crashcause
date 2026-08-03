@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // ---------------------------------------------------------------------------
@@ -142,6 +143,35 @@ func TestHTEventsMatching(t *testing.T) {
 	}
 }
 
+func TestHTEventsForContainer(t *testing.T) {
+	attributed := warning("Unhealthy", "Liveness probe failed", 1)
+	attributed.Container = "api"
+	other := warning("Unhealthy", "Liveness probe failed", 1)
+	other.Container = "sidecar"
+	unattributed := warning("Killing", "Stopping container", 1)
+	evs := []Event{attributed, other, unattributed}
+
+	t.Run("keeps matching and unattributed events", func(t *testing.T) {
+		in := baseInputs() // Container "api"
+		got := eventsForContainer(in, evs)
+		if len(got) != 2 || got[0].Container != "api" || got[1].Container != "" {
+			t.Fatalf("eventsForContainer() = %+v, want the api event and the unattributed event", got)
+		}
+	})
+	t.Run("empty container under diagnosis keeps everything", func(t *testing.T) {
+		in := baseInputs()
+		in.Container = ""
+		if got := eventsForContainer(in, evs); len(got) != 3 {
+			t.Fatalf("eventsForContainer() = %+v, want all events kept", got)
+		}
+	})
+	t.Run("empty input yields nil", func(t *testing.T) {
+		if got := eventsForContainer(baseInputs(), nil); got != nil {
+			t.Fatalf("eventsForContainer(nil) = %+v, want nil", got)
+		}
+	})
+}
+
 func TestHTContainsFold(t *testing.T) {
 	if !containsFold("Hello World", "world") {
 		t.Error("containsFold should be case-insensitive")
@@ -260,6 +290,19 @@ func TestHTTruncateMessage(t *testing.T) {
 		}
 		if got[:maxMessageLen] != long[:maxMessageLen] {
 			t.Errorf("truncateMessage() did not preserve the first %d chars", maxMessageLen)
+		}
+	})
+	t.Run("multi-byte rune straddling the cut is not split", func(t *testing.T) {
+		// "é" is two bytes starting at index maxMessageLen-1, so a byte-wise
+		// cut at maxMessageLen would split it and emit invalid UTF-8.
+		long := strings.Repeat("a", maxMessageLen-1) + "é" + strings.Repeat("b", 20)
+		got := truncateMessage(long)
+		if !utf8.ValidString(got) {
+			t.Fatalf("truncateMessage() produced invalid UTF-8: %q", got)
+		}
+		want := strings.Repeat("a", maxMessageLen-1) + "..."
+		if got != want {
+			t.Errorf("truncateMessage() = %q, want the cut backed off to the rune boundary", got)
 		}
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // maxMessageLen caps how much of a raw Kubernetes message is copied into
@@ -85,6 +86,23 @@ func eventsMatching(in Inputs, substr string) []Event {
 	return out
 }
 
+// eventsForContainer drops events attributed to a DIFFERENT container than
+// the one under diagnosis. Events without container attribution are kept:
+// servers that omit involvedObject.fieldPath must not lose probe/kill
+// matching (fail open).
+func eventsForContainer(in Inputs, evs []Event) []Event {
+	if in.Container == "" {
+		return evs
+	}
+	var out []Event
+	for _, e := range evs {
+		if e.Container == "" || e.Container == in.Container {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // containsFold is a case-insensitive strings.Contains.
 func containsFold(haystack, needle string) bool {
 	return strings.Contains(strings.ToLower(haystack), strings.ToLower(needle))
@@ -148,7 +166,12 @@ func truncateMessage(s string) string {
 	if len(s) <= maxMessageLen {
 		return s
 	}
-	return s[:maxMessageLen] + "..."
+	// Back off to a rune boundary so the cut never splits a multi-byte rune.
+	cut := maxMessageLen
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }
 
 func formatDuration(d time.Duration) string {
