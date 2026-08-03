@@ -81,10 +81,10 @@ spec:
 
     Cause codes include oom_killed, sigkill_unattributed, evicted,
     probe_liveness_failure, probe_startup_failure, image_pull_auth,
-    image_pull_not_found, image_pull_other, config_missing_reference,
-    volume_mount_failure, init_container_failure, init_container_stuck,
-    unschedulable, app_exit_nonzero, sigkill_after_grace and
-    completed_restart_loop.
+    image_pull_not_found, image_pull_other, security_context_violation,
+    config_missing_reference, volume_mount_failure, init_container_failure,
+    init_container_stuck, unschedulable, app_exit_nonzero,
+    sigkill_after_grace and completed_restart_loop.
 
     Usage:
 

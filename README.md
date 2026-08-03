@@ -7,7 +7,7 @@ or `logs` output anywhere.
 ![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-> **Status: v0.1.0, the first public release.**
+> **Status: v0.1.1.**
 >
 > - `crashcause inspect` and `crashcause watch` are both implemented end-to-end and
 >   unit-tested under `go test -race`: the full rule engine, human and `--output json`
@@ -119,7 +119,7 @@ is krew's development-only install path; it works fine here, it just isn't how a
 published plugin is normally fetched.)
 
 ```sh
-kubectl krew install --manifest-url=https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause.yaml
+kubectl krew install --manifest-url=https://github.com/ryckakas/crashcause/releases/download/v0.1.1/crashcause.yaml
 ```
 
 Prebuilt `linux`/`darwin` `amd64`/`arm64` archives (plus `checksums.txt` and SBOMs) are
@@ -144,11 +144,11 @@ The chart is published as an OCI artifact to GitHub Container Registry:
 
 ```sh
 helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  --version 0.1.0 -n crashcause --create-namespace \
+  --version 0.1.1 -n crashcause --create-namespace \
   -f my-values.yaml
 ```
 
-`helm show values oci://ghcr.io/ryckakas/charts/crashcause --version 0.1.0` prints the
+`helm show values oci://ghcr.io/ryckakas/charts/crashcause --version 0.1.1` prints the
 full default values. To install from a checkout instead — for local development, or to
 try chart changes before they are released:
 

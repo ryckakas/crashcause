@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-03
+
 ### Added
 
 - New cause code `security_context_violation` (the 18th): a
@@ -170,5 +172,6 @@ First public release.
 - Events are now attributed to their container, preventing cross-container
   misdiagnosis in multi-container pods.
 
-[Unreleased]: https://github.com/ryckakas/crashcause/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ryckakas/crashcause/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ryckakas/crashcause/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ryckakas/crashcause/releases/tag/v0.1.0

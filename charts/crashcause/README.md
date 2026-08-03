@@ -26,14 +26,14 @@ The chart is published as an OCI artifact to GitHub Container Registry. Helm
 
 ```bash
 helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  --version 0.1.0 -n crashcause --create-namespace
+  --version 0.1.1 -n crashcause --create-namespace
 ```
 
 Apply your own overrides with a values file:
 
 ```bash
 helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  --version 0.1.0 -n crashcause --create-namespace \
+  --version 0.1.1 -n crashcause --create-namespace \
   -f my-values.yaml
 ```
 
@@ -397,7 +397,7 @@ chart:
 - `../../examples/grafana-dashboard.json`
 - `../../examples/prometheus-alerts.yaml`
 
-## Known limitations in 0.1.0
+## Known limitations in 0.1.1
 
 - **RBAC is always cluster-scoped**, even when `watch.namespaces` restricts
   what is watched. This is because the controller also reads cluster-scoped
