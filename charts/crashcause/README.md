@@ -26,21 +26,25 @@ The chart is published as an OCI artifact to GitHub Container Registry. Helm
 
 ```bash
 helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  --version 0.1.0 -n crashcause --create-namespace
+  -n crashcause --create-namespace
 ```
 
-Apply your own overrides with a values file:
+Helm resolves the newest published chart version; add `--version X.Y.Z` to pin
+a specific release. Apply your own overrides with a values file:
 
 ```bash
 helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  --version 0.1.0 -n crashcause --create-namespace \
+  -n crashcause --create-namespace \
   -f my-values.yaml
 ```
 
 Every example below uses the local chart path (`./charts/crashcause`), which
 works from a checkout and is the right form when trying out unreleased chart
-changes; substitute the `oci://` reference plus `--version` to install a
-published chart instead.
+changes; substitute the `oci://` reference to install a published chart
+instead. When installing from a checkout, set `image.tag` to a released
+version: the checked-in `Chart.yaml` carries a `0.0.0-dev` placeholder
+`appVersion` (the released chart gets the real one stamped in at publish
+time), and the image tag defaults to `appVersion` when `image.tag` is empty.
 
 Uninstall:
 
@@ -89,7 +93,7 @@ helm template crashcause ./charts/crashcause \
 ```
 
 Note: even in this example the `ClusterRole` for `pods`, `events`, and
-`nodes` is still cluster-scoped — see [Known limitations](#known-limitations-in-010)
+`nodes` is still cluster-scoped — see [Known limitations](#known-limitations-pre-10)
 for why `watch.namespaces` narrows what is *watched*, not what RBAC grants.
 
 ## Values
@@ -116,7 +120,7 @@ for why `watch.namespaces` narrows what is *watched*, not what RBAC grants.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `watch.namespaces` | list | `[]` | Namespaces the controller watches; empty means all namespaces. Does not change what RBAC grants — see [Known limitations](#known-limitations-in-010). |
+| `watch.namespaces` | list | `[]` | Namespaces the controller watches; empty means all namespaces. Does not change what RBAC grants — see [Known limitations](#known-limitations-pre-10). |
 | `watch.selector` | string | `""` | Label selector further limiting which pods are watched, e.g. `tier!=batch`. |
 | `watch.reemitInterval` | duration | `1h` | Minimum time before an unchanged diagnosis for the same dedup key is logged again; the Prometheus counter still increments on every observed crash regardless. |
 | `watch.dedupTTL` | duration | `6h` | How long a dedup key is remembered, bounding controller memory and driving metric series cleanup. |
@@ -397,7 +401,7 @@ chart:
 - `../../examples/grafana-dashboard.json`
 - `../../examples/prometheus-alerts.yaml`
 
-## Known limitations in 0.1.0
+## Known limitations (pre-1.0)
 
 - **RBAC is always cluster-scoped**, even when `watch.namespaces` restricts
   what is watched. This is because the controller also reads cluster-scoped
@@ -411,9 +415,10 @@ chart:
 - **The chart is published only as an OCI artifact**, not as a classic
   `helm repo add`-able HTTP repository, and it is therefore not indexed on
   Artifact Hub. Helm 3.8+ can install it directly, as shown above.
-- **The chart version tracks the crashcause release.** A chart-only fix is
-  published by cutting a new crashcause tag, because the release job refuses
-  to push a chart whose `appVersion` does not match the tag.
+- **The chart version tracks the crashcause release.** The release workflow
+  stamps both the chart version and `appVersion` from the git tag at package
+  time, so a chart-only fix is still published by cutting a new crashcause
+  tag — there is no independent chart versioning.
 
 ## Uninstall
 

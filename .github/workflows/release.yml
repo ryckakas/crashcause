@@ -70,28 +70,69 @@ jobs:
         with:
           version: v4.2.3
 
-      # The chart's appVersion is the image tag it defaults to, so a chart
-      # published from tag vX.Y.Z while pinned to some other appVersion would
-      # silently deploy the wrong binary. Fail the release instead.
-      - name: Verify chart appVersion matches the tag
+      # Chart.yaml carries 0.0.0-dev placeholders; the real version and
+      # appVersion (the image tag the chart defaults to) are stamped from the
+      # git tag at package time below, so a release never needs a hand-bumped
+      # Chart.yaml. The check keeps that convention honest: a real version
+      # hardcoded back into the file would be invisible here (the --version
+      # flags win) but would break the from-checkout story the chart README
+      # documents.
+      - name: Verify Chart.yaml still carries the 0.0.0-dev placeholders
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          chart_version="$(helm show chart charts/crashcause \
+            | sed -n 's/^version:[[:space:]]*//p')"
           app_version="$(helm show chart charts/crashcause \
             | sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p')"
-          if [ "$app_version" != "$version" ]; then
-            echo "FAIL: tag is ${GITHUB_REF_NAME} (version ${version}) but chart appVersion is '${app_version}'"
+          if [ "$chart_version" != "0.0.0-dev" ] || [ "$app_version" != "0.0.0-dev" ]; then
+            echo "FAIL: Chart.yaml must keep the 0.0.0-dev placeholders, found version='${chart_version}' appVersion='${app_version}'."
+            echo "The release stamps the real version from the tag at package time."
             exit 1
           fi
-          echo "OK: chart appVersion ${app_version} matches tag ${GITHUB_REF_NAME}"
+          echo "OK: Chart.yaml carries the 0.0.0-dev placeholders"
 
       - name: Log in to ghcr.io
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Package and push chart
+      - name: Package and push chart (version stamped from the tag)
         run: |
           set -euo pipefail
-          helm package charts/crashcause -d dist
-          helm push dist/crashcause-*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          version="${GITHUB_REF_NAME#v}"
+          helm package charts/crashcause -d dist --version "${version}" --app-version "${version}"
+          helm push "dist/crashcause-${version}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+
+  # The krew manifest is committed in placeholder form (never-matching
+  # digests); the installable copy exists only as a release asset. This job
+  # produces it: it takes the checksums goreleaser just published, stamps the
+  # tag and digests via hack/krew-manifest.sh, and uploads the result as the
+  # release's `crashcause.yaml` - the asset the README's
+  # releases/latest/download/crashcause.yaml install line resolves to.
+  # GITHUB_TOKEN is sufficient here: downloading and uploading release assets
+  # is plain API usage, not event chaining, so no PAT is needed.
+  krew:
+    name: Publish krew manifest
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # upload the manifest as a release asset
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Rewrite the manifest from the release checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "${GITHUB_REF_NAME}" \
+            --pattern 'crashcause_*_checksums.txt' --dir /tmp/krew
+          chmod +x hack/krew-manifest.sh
+          ./hack/krew-manifest.sh "${GITHUB_REF_NAME}" /tmp/krew/crashcause_*_checksums.txt
+
+      # --clobber makes a re-run of this job overwrite the asset instead of
+      # failing on "asset already exists".
+      - name: Upload the manifest as a release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" deploy/krew/crashcause.yaml --clobber

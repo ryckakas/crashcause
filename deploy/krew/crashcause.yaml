@@ -1,60 +1,31 @@
 # krew plugin manifest for crashcause (`kubectl crashcause`).
 #
 # STATUS: not yet published to the krew index
-# (https://github.com/kubernetes-sigs/krew-index). This file is
-# hand-maintained here for local installs
-# (`kubectl krew install --manifest=deploy/krew/crashcause.yaml`), is attached
-# to each GitHub Release as `crashcause.yaml` with its placeholders filled in
-# (which is what the README's `--manifest-url` install line fetches), and is
-# the basis for a future krew-index submission.
+# (https://github.com/kubernetes-sigs/krew-index). This file is the basis
+# for a future krew-index submission; until then the installable copy is
+# published as a release asset (see below).
 #
 # ---------------------------------------------------------------------------
 # RELEASE AUTOMATION CONTRACT
 # ---------------------------------------------------------------------------
 # .goreleaser.yaml deliberately does NOT use goreleaser's `krews:` publisher
 # (its availability varies across goreleaser versions); this manifest is the
-# single source of truth instead. Exactly three kinds of field are
-# release-time placeholders, and nothing else in this file needs to change
-# between releases:
+# single source of truth instead.
 #
-#   1. spec.version              -> the release tag, e.g. v0.1.0
-#   2. every platforms[].uri     -> the "v0.0.0" and "0.0.0" segments become
-#                                   the tag and the bare version
-#   3. every platforms[].sha256  -> 64 hex chars, taken from the release's
-#                                   crashcause_<version>_checksums.txt
+# The committed copy of this file stays in PLACEHOLDER form permanently:
+# spec.version is v0.0.0, the archive uris carry v0.0.0/0.0.0 segments, and
+# every sha256 is 64 zeros -- a well-formed but never-matching digest, so an
+# accidental install from this repo copy FAILS the checksum check rather
+# than silently installing something. Do not "fix" the zeros by shortening
+# or removing them, and do not commit real versions or digests here.
 #
-# In the placeholder form of this file those sha256 values are 64 zeros: a
-# well-formed but never-matching digest, so an accidental install from an
-# un-rewritten manifest FAILS the checksum check rather than silently
-# installing something. Do not "fix" them by shortening or removing them.
-# The copy on the default branch is the rewritten form, carrying the real
-# digests of the newest release.
-#
-# Rewrite recipe, starting from the placeholder form of this file (i.e. the
-# previous release's manifest reverted, or `git show <prev-tag>:` of it), given
-# TAG=v0.1.0 and the downloaded checksums.txt.
-#
-# Every pattern is ANCHORED to its leading indentation on purpose: the
-# unanchored forms (`s/version: v0.0.0/`, `s|/download/v0.0.0/|`) also match
-# this very comment block, so running them rewrites the recipe itself and the
-# next release starts from mangled instructions. Comment lines begin with `#`,
-# so anchoring on the YAML indent can never hit them.
-#
-#   VERSION="${TAG#v}"
-#   sed -i "s|^  version: v0\.0\.0|  version: ${TAG}|" deploy/krew/crashcause.yaml
-#   sed -i "s|^\(      uri: .*\)/download/v0\.0\.0/|\1/download/${TAG}/|" deploy/krew/crashcause.yaml
-#   sed -i "s|^\(      uri: .*\)crashcause_0\.0\.0_|\1crashcause_${VERSION}_|" deploy/krew/crashcause.yaml
-#   # then, per platform, replace the zeros on the `sha256:` line following
-#   # each `uri:` with that archive's digest from
-#   # crashcause_${VERSION}_checksums.txt - match on the archive FILENAME, not
-#   # on ordering, so a reordered platform list cannot pair a digest with the
-#   # wrong platform.
-#   gh release upload "${TAG}" deploy/krew/crashcause.yaml
-#
-# The rewritten manifest is committed back to main (so the checked-out copy
-# always describes the newest release) AND uploaded as a release asset (so the
-# `--manifest-url` install path resolves). This is still a manual post-release
-# step; automating it inside the release workflow is tracked for milestone 9.
+# The installable form is produced per release by hack/krew-manifest.sh,
+# which stamps the tag into spec.version and the uris and fills each
+# platform's sha256 from that release's crashcause_<version>_checksums.txt,
+# pairing digest to platform by archive filename rather than list order.
+# The release workflow's `krew` job runs it and uploads the result as the
+# release's `crashcause.yaml` asset -- which is what the README's
+# releases/latest/download/crashcause.yaml install line resolves to.
 #
 # The `uri` filenames MUST stay in sync with the archive `name_template` in
 # ../../.goreleaser.yaml ("crashcause_{{ .Version }}_{{ .Os }}_{{ .Arch }}",
@@ -66,7 +37,7 @@ kind: Plugin
 metadata:
   name: crashcause
 spec:
-  version: v0.1.0
+  version: v0.0.0
   homepage: https://github.com/ryckakas/crashcause
   shortDescription: Explain why a Kubernetes pod crashed
   description: |
@@ -81,10 +52,10 @@ spec:
 
     Cause codes include oom_killed, sigkill_unattributed, evicted,
     probe_liveness_failure, probe_startup_failure, image_pull_auth,
-    image_pull_not_found, image_pull_other, config_missing_reference,
-    volume_mount_failure, init_container_failure, init_container_stuck,
-    unschedulable, app_exit_nonzero, sigkill_after_grace and
-    completed_restart_loop.
+    image_pull_not_found, image_pull_other, security_context_violation,
+    config_missing_reference, volume_mount_failure, init_container_failure,
+    init_container_stuck, unschedulable, app_exit_nonzero,
+    sigkill_after_grace and completed_restart_loop.
 
     Usage:
 
@@ -113,8 +84,8 @@ spec:
         matchLabels:
           os: darwin
           arch: amd64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_darwin_amd64.tar.gz
-      sha256: "fe8bc0f3e9076bfcdc364bf464e04b90377030d34a8b53acf6d5df01f51debd4"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
@@ -126,8 +97,8 @@ spec:
         matchLabels:
           os: darwin
           arch: arm64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_darwin_arm64.tar.gz
-      sha256: "6232dd5adc3ff57608db16c55f9ae323513500a1b5b0f7eb23842d96919b750e"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_darwin_arm64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
@@ -139,8 +110,8 @@ spec:
         matchLabels:
           os: linux
           arch: amd64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_linux_amd64.tar.gz
-      sha256: "49279f4667bd5325da9804e2469f9ad2a298093925512fb1862447116d98aeb5"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_amd64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause
@@ -152,8 +123,8 @@ spec:
         matchLabels:
           os: linux
           arch: arm64
-      uri: https://github.com/ryckakas/crashcause/releases/download/v0.1.0/crashcause_0.1.0_linux_arm64.tar.gz
-      sha256: "c77a7e47049d10ee1da0b39786b66fa31b059d1552162553bbdd80990342109c"
+      uri: https://github.com/ryckakas/crashcause/releases/download/v0.0.0/crashcause_0.0.0_linux_arm64.tar.gz
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
       bin: crashcause
       files:
         - from: crashcause

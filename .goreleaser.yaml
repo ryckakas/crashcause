@@ -102,8 +102,8 @@ release:
 # krew:
 # We deliberately do NOT use goreleaser's `krews:` integration - its
 # availability/stability varies across goreleaser versions and we'd rather
-# keep this pipeline simple and honest. Instead, the krew plugin manifest is
-# hand-maintained at deploy/krew/crashcause.yaml. Its `version` and `sha256`
-# fields are release-time placeholders today; wiring up automation to
-# rewrite them from this release's checksums.txt is tracked for milestone 9,
-# alongside the Helm chart work.
+# keep this pipeline simple and honest. Instead, the krew plugin manifest
+# lives at deploy/krew/crashcause.yaml in permanent placeholder form; the
+# release workflow's `krew` job rewrites it from this release's
+# checksums.txt (hack/krew-manifest.sh) and uploads the result as the
+# `crashcause.yaml` release asset.
