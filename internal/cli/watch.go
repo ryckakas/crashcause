@@ -68,7 +68,7 @@ emits diagnoses to one or more sinks (stdout, Prometheus, Loki).`,
 	fs.StringSliceVar(&opts.namespaces, "namespaces", nil, "namespaces to watch (default: all namespaces)")
 	fs.StringVar(&opts.selector, "selector", "", "label selector to filter watched pods")
 	fs.StringVar(&opts.metricsAddr, "metrics-addr", "", "address to serve Prometheus metrics on, e.g. :9090 (default: disabled)")
-	fs.StringVar(&opts.lokiURL, "loki-url", "", "Loki push URL to send diagnoses to (default: disabled)")
+	fs.StringVar(&opts.lokiURL, "loki-url", "", "Loki URL to send diagnoses to, either the base URL or the full /loki/api/v1/push URL (default: disabled)")
 	fs.DurationVar(&opts.reemitInterval, "reemit-interval", time.Hour, "minimum interval before re-emitting an unchanged diagnosis for the same container")
 	fs.DurationVar(&opts.dedupTTL, "dedup-ttl", 6*time.Hour, "how long a diagnosis is remembered for deduplication purposes")
 	fs.BoolVar(&opts.collectLogs, "collect-logs", true, "fetch container logs as diagnosis evidence (requires the pods/log permission)")
@@ -105,7 +105,7 @@ func runWatch(cmd *cobra.Command, _ []string, opts *watchOptions) error {
 		return fmt.Errorf("building kubernetes client: %w", err)
 	}
 
-	summarizer, err := opts.ai.buildSummarizer()
+	summarizer, err := opts.ai.buildSummarizer(cmd.ErrOrStderr())
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -210,6 +211,32 @@ func TestLokiNewValidatesURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLokiAcceptsFullPushURL pins the URL tolerance: the chart docs and the
+// --loki-url help show the FULL push URL, so passing one must not produce a
+// doubled .../push/loki/api/v1/push path (which 404s and drops every batch).
+func TestLokiAcceptsFullPushURL(t *testing.T) {
+	t.Parallel()
+
+	ts := lokiNewTestServer(t, nil)
+	s, err := NewLoki(LokiConfig{URL: ts.srv.URL + lokiPushPath, BatchSize: 1})
+	if err != nil {
+		t.Fatalf("NewLoki: %v", err)
+	}
+	defer lokiCloseSink(t, s)
+
+	got := s.(*lokiSink).pushURL
+	if !strings.HasSuffix(got, lokiPushPath) || strings.Count(got, lokiPushPath) != 1 {
+		t.Fatalf("pushURL = %q, want exactly one %q suffix", got, lokiPushPath)
+	}
+
+	d := lokiTestDiagnosis("prod", engine.CauseOOMKilled, time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC))
+	if err := s.Emit(context.Background(), d); err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	// lokiWaitPush asserts the request path is exactly lokiPushPath.
+	lokiWaitPush(t, ts, 3*time.Second)
 }
 
 func TestLokiName(t *testing.T) {

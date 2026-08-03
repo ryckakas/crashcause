@@ -5,6 +5,12 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+
+	"golang.org/x/time/rate"
+
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
@@ -251,22 +257,167 @@ func TestControllerObserveSkipsUnchangedFingerprint(t *testing.T) {
 	}
 }
 
+// TestControllerObserveReenqueuesStaticallyBrokenPod: a pod whose broken state
+// never changes (constant fingerprint) must still be re-enqueued once per
+// ReemitInterval — otherwise nothing ever refreshes its dedup entry and the
+// TTL sweep drops its metric series while the pod is still broken.
+func TestControllerObserveReenqueuesStaticallyBrokenPod(t *testing.T) {
+	clk := newFakeClock(testBaseTime)
+	c, _, _ := newTestController(t, clk, dedupConfig(6*time.Hour, time.Hour))
+
+	pod := crashLoopPod(testPodName, testPodUID, 1)
+	c.observe(pod)
+	if got := len(c.queue); got != 1 {
+		t.Fatalf("queue length after first observe = %d, want 1", got)
+	}
+
+	// Just under the reemit interval: still suppressed.
+	clk.advance(time.Hour - time.Millisecond)
+	c.observe(pod.DeepCopy())
+	if got := len(c.queue); got != 1 {
+		t.Fatalf("queue length just under ReemitInterval = %d, want 1", got)
+	}
+
+	// Exactly at the interval: re-enqueued.
+	clk.advance(time.Millisecond)
+	c.observe(pod.DeepCopy())
+	if got := len(c.queue); got != 2 {
+		t.Fatalf("queue length exactly at ReemitInterval = %d, want 2", got)
+	}
+
+	// The re-enqueue resets the clock: the next repeat is suppressed again.
+	c.observe(pod.DeepCopy())
+	if got := len(c.queue); got != 2 {
+		t.Fatalf("queue length right after a re-enqueue = %d, want 2", got)
+	}
+}
+
+// jobRunPod is a crashing pod owned by one run Job; distinct run names
+// normalize to the same metric series (the trailing digits are stripped).
+func jobRunPod(name string, uid types.UID, jobName string) *corev1.Pod {
+	pod := crashLoopPod(name, uid, 1)
+	pod.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "batch/v1",
+		Kind:       "Job",
+		Name:       jobName,
+		UID:        types.UID("job-uid-" + jobName),
+		Controller: boolPtr(true),
+	}}
+	return pod
+}
+
+// TestControllerForgetPodKeepsSharedJobSeries: per-run Jobs are distinct
+// workloads for dedup, but normalizeOwner folds them into ONE metric series.
+// Forgetting one finished run must not wipe the series other live runs still
+// increment; only losing the last run may retire it.
+func TestControllerForgetPodKeepsSharedJobSeries(t *testing.T) {
+	clk := newFakeClock(testBaseTime)
+	c, _, _ := newTestController(t, clk, dedupConfig(6*time.Hour, time.Hour))
+	ctx := context.Background()
+
+	sharedSeries := func() []promSample {
+		var out []promSample
+		for _, s := range diagnosesSamples(t, c) {
+			if s.labels["owner_kind"] == "Job" && s.labels["owner_name"] == "backup" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+
+	runA := jobRunPod("backup-29471234-abcde", "job-pod-a", "backup-29471234")
+	runB := jobRunPod("backup-29475678-fghij", "job-pod-b", "backup-29475678")
+	c.processPod(ctx, runA)
+	c.processPod(ctx, runB)
+
+	got := sharedSeries()
+	if len(got) != 1 || got[0].value != 2 {
+		t.Fatalf("shared Job series = %+v, want one series with value 2; scrape:\n%s",
+			got, scrapeMetrics(t, c))
+	}
+
+	c.forgetPod(runA)
+
+	got = sharedSeries()
+	if len(got) != 1 || got[0].value != 2 {
+		t.Fatalf("shared Job series after forgetting one run = %+v, want it untouched; scrape:\n%s",
+			got, scrapeMetrics(t, c))
+	}
+
+	c.forgetPod(runB)
+
+	if got := sharedSeries(); len(got) != 0 {
+		t.Fatalf("shared Job series after forgetting the last run = %+v, want none; scrape:\n%s",
+			got, scrapeMetrics(t, c))
+	}
+}
+
+// TestControllerLeaderElectedStandbyStopsPromptly: a replica that never held
+// the lease has no work loop to drain, so runLeaderElected must return as soon
+// as the elector does instead of waiting out the full drain timeout.
+func TestControllerLeaderElectedStandbyStopsPromptly(t *testing.T) {
+	clk := newFakeClock(testBaseTime)
+	cfg := dedupConfig(6*time.Hour, time.Hour)
+	cfg.LeaderElect = true
+	c, _, _ := newTestController(t, clk, cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- c.runLeaderElected(ctx) }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("runLeaderElected on a canceled context = %v, want nil", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("runLeaderElected did not return promptly for a replica that never led")
+	}
+}
+
 // TestControllerReportLogSkipsIsDelta guards the poll-and-report loop: the
 // Prometheus counter must grow by the DELTA of the collector's cumulative skip
 // count, never by the cumulative value itself.
 func TestControllerReportLogSkipsIsDelta(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
-	c, _, _ := newTestController(t, clk, dedupConfig(6*time.Hour, time.Hour))
+	cfg := dedupConfig(6*time.Hour, time.Hour)
+	cfg.CollectLogs = true
+	// Effectively burst-only: exactly logBurst fetches ever pass the limiter,
+	// so every fetch beyond that is a deterministic skip.
+	cfg.LogRateLimit = rate.Limit(1e-9)
+	c, _, _ := newTestController(t, clk, cfg)
+	ctx := context.Background()
+
+	requireSkipCounter := func(want float64) {
+		t.Helper()
+		samples := parseSamples(t, scrapeMetrics(t, c), "crashcause_log_fetches_skipped_total")
+		if len(samples) != 1 {
+			t.Fatalf("expected exactly one crashcause_log_fetches_skipped_total sample, got %d", len(samples))
+		}
+		if samples[0].value != want {
+			t.Fatalf("crashcause_log_fetches_skipped_total = %v, want %v", samples[0].value, want)
+		}
+	}
 
 	// Nothing skipped yet: reporting twice must not create movement.
 	c.reportLogSkips()
 	c.reportLogSkips()
+	requireSkipCounter(0)
 
-	samples := parseSamples(t, scrapeMetrics(t, c), "crashcause_log_fetches_skipped_total")
-	if len(samples) != 1 {
-		t.Fatalf("expected exactly one crashcause_log_fetches_skipped_total sample, got %d", len(samples))
+	// Exhaust the burst, then force two skips.
+	for i := 0; i < logBurst+2; i++ {
+		c.processPod(ctx, crashLoopPod(testPodName, testPodUID, 1))
 	}
-	if samples[0].value != 0 {
-		t.Fatalf("crashcause_log_fetches_skipped_total = %v, want 0", samples[0].value)
+	c.reportLogSkips()
+	requireSkipCounter(2)
+
+	// Three more skips: the counter must grow by the delta (3), not by the
+	// collector's cumulative total (5) again.
+	for i := 0; i < 3; i++ {
+		c.processPod(ctx, crashLoopPod(testPodName, testPodUID, 1))
 	}
+	c.reportLogSkips()
+	requireSkipCounter(5)
 }
