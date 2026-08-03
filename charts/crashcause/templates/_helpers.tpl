@@ -116,6 +116,9 @@ cross-referencing the chart version's defaults.
 {{- if .Values.ai.url -}}
 {{- $args = append $args (printf "--ai-url=%s" .Values.ai.url) -}}
 {{- end -}}
+{{- if .Values.ai.model -}}
+{{- $args = append $args (printf "--ai-model=%s" .Values.ai.model) -}}
+{{- end -}}
 {{- $args = append $args (printf "--ai-redact=%v" .Values.ai.redact) -}}
 {{- $args = append $args (printf "--ai-redact-ips=%v" .Values.ai.redactIPs) -}}
 {{- if .Values.ai.namespaces -}}
