@@ -194,14 +194,14 @@ jobs:
       # the deletion step below can name the cluster deterministically.
       - name: Create kind cluster (using examples/kind-demo/kind-config.yaml)
         if: hashFiles('examples/kind-demo/kind-config.yaml') != ''
-        uses: helm/kind-action@v1.14.0
+        uses: helm/kind-action@v1.15.0
         with:
           config: examples/kind-demo/kind-config.yaml
           cluster_name: crashcause-demo
 
       - name: Create kind cluster (default config fallback)
         if: hashFiles('examples/kind-demo/kind-config.yaml') == ''
-        uses: helm/kind-action@v1.14.0
+        uses: helm/kind-action@v1.15.0
         with:
           cluster_name: crashcause-demo
 
