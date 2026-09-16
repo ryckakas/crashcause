@@ -18,7 +18,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
-// errInjected is returned by the reactors that simulate a denied API call.
 var errInjected = errors.New("forbidden")
 
 // denyReactor makes the matching verb/resource pair fail with errInjected, so
@@ -27,8 +26,6 @@ var errInjected = errors.New("forbidden")
 func denyReactor(k8stesting.Action) (bool, runtime.Object, error) {
 	return true, nil, errInjected
 }
-
-// --- 1. crashed app container ------------------------------------------------
 
 func TestForPodCrashedAppContainer(t *testing.T) {
 	pod := crashedPod(t)
@@ -175,8 +172,6 @@ func TestForPodCrashedAppContainer(t *testing.T) {
 	})
 }
 
-// --- 2. rate limiter ---------------------------------------------------------
-
 func TestLogRateLimiterSkipsFetches(t *testing.T) {
 	cs := newClient(t, crashedPod(t), otherPodEvent())
 	opts := testOptions()
@@ -212,8 +207,6 @@ func TestLogRateLimiterSkipsFetches(t *testing.T) {
 	}
 }
 
-// --- 3. log collection disabled ---------------------------------------------
-
 func TestCollectLogsDisabled(t *testing.T) {
 	cs := newClient(t, crashedPod(t), otherPodEvent())
 	opts := testOptions()
@@ -242,8 +235,6 @@ func TestCollectLogsDisabled(t *testing.T) {
 		t.Errorf("LogFetchesSkipped() = %d, want 0 (disabled is not rate limited)", n)
 	}
 }
-
-// --- 4. pending + FailedScheduling -------------------------------------------
 
 func TestPendingUnschedulablePod(t *testing.T) {
 	pod := pendingPod(t)
@@ -290,8 +281,6 @@ func TestPendingUnschedulablePod(t *testing.T) {
 		t.Errorf("got %d log actions, want 0 for an unschedulable pod", n)
 	}
 }
-
-// --- 5. owner resolution ------------------------------------------------------
 
 func TestOwnerResolution(t *testing.T) {
 	replicaSet := func(ownedByDeployment bool) *appsv1.ReplicaSet {
@@ -390,8 +379,6 @@ func TestOwnerResolution(t *testing.T) {
 	})
 }
 
-// --- 6. node conditions -------------------------------------------------------
-
 func TestNodeConditions(t *testing.T) {
 	t.Run("pressure mapped", func(t *testing.T) {
 		cs := newClient(t, crashedPod(t), testNode(corev1.ConditionTrue, corev1.ConditionFalse, corev1.ConditionFalse))
@@ -439,8 +426,6 @@ func TestNodeConditions(t *testing.T) {
 		}
 	})
 }
-
-// --- 7. container filter -------------------------------------------------------
 
 func TestContainerFilter(t *testing.T) {
 	multiPod := func(t *testing.T) *corev1.Pod {
@@ -524,8 +509,6 @@ func TestContainerFilter(t *testing.T) {
 	})
 }
 
-// --- 8. healthy pod ------------------------------------------------------------
-
 func TestHealthyPodProducesNothing(t *testing.T) {
 	cs := newClient(t, healthyPod(t), otherPodEvent(), testNode(corev1.ConditionTrue, corev1.ConditionTrue, corev1.ConditionTrue))
 	c := New(cs, testOptions())
@@ -546,8 +529,6 @@ func TestHealthyPodProducesNothing(t *testing.T) {
 		t.Errorf("unexpected action %+v", a)
 	}
 }
-
-// --- 9. stuck init container ---------------------------------------------------
 
 func TestInitContainerStuck(t *testing.T) {
 	initPod := func(t *testing.T, runningFor time.Duration) *corev1.Pod {
@@ -622,8 +603,6 @@ func TestInitContainerStuck(t *testing.T) {
 	})
 }
 
-// --- 10. waiting with no previous state ----------------------------------------
-
 func TestWaitingWithNoPreviousReadsCurrentLog(t *testing.T) {
 	pod := basePod(t)
 	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
@@ -660,8 +639,6 @@ func TestWaitingWithNoPreviousReadsCurrentLog(t *testing.T) {
 		t.Error("Previous = true, want false when there is no lastState.terminated")
 	}
 }
-
-// --- 11. evicted pod ------------------------------------------------------------
 
 func TestEvictedPod(t *testing.T) {
 	pod := basePod(t)
@@ -701,8 +678,6 @@ func TestEvictedPod(t *testing.T) {
 		t.Error("Previous = true, want false for the evicted synthetic entry")
 	}
 }
-
-// --- 12. deleting pod ------------------------------------------------------------
 
 func TestDeletingPod(t *testing.T) {
 	deletedAt := fixedNow.Add(-time.Minute)
@@ -757,8 +732,6 @@ func TestDeletingPod(t *testing.T) {
 	})
 }
 
-// --- 13. ForPodObject does not re-GET the pod --------------------------------------
-
 func TestForPodObjectSkipsPodGet(t *testing.T) {
 	pod := crashedPod(t)
 	ev := podEvent("ev-backoff", corev1.EventTypeWarning, "BackOff", "Back-off restarting failed container", 2, fixedNow)
@@ -780,8 +753,6 @@ func TestForPodObjectSkipsPodGet(t *testing.T) {
 		t.Errorf("events not collected for an informer-supplied pod: %+v", got[0].Events)
 	}
 }
-
-// --- 14. error paths ----------------------------------------------------------------
 
 func TestForPodErrors(t *testing.T) {
 	t.Run("missing pod", func(t *testing.T) {
@@ -816,8 +787,6 @@ func TestForPodErrors(t *testing.T) {
 		}
 	})
 }
-
-// --- degraded event collection --------------------------------------------------------
 
 func TestEventListFailureDegrades(t *testing.T) {
 	cs := newClient(t, crashedPod(t))
@@ -902,8 +871,6 @@ func TestEventContainerAttribution(t *testing.T) {
 	}
 }
 
-// --- options and small units -----------------------------------------------------------
-
 func TestDefaultOptions(t *testing.T) {
 	opts := DefaultOptions()
 	if opts.PreviousLogLines != defaultPreviousLogLines {
@@ -986,8 +953,6 @@ func TestTailLinesOptionIsHonoured(t *testing.T) {
 		t.Errorf("TailLines = %v, want 5", reqs[0].TailLines)
 	}
 }
-
-// --- additional container roles and states ------------------------------------------------
 
 func TestEphemeralContainer(t *testing.T) {
 	pod := basePod(t)
@@ -1092,8 +1057,6 @@ func TestOwnerRefWithoutControllerFlag(t *testing.T) {
 		t.Error("OwnerRolling = false, want true for a deleting StatefulSet pod")
 	}
 }
-
-// --- concurrency -------------------------------------------------------------------------
 
 func TestCollectorConcurrentUse(t *testing.T) {
 	pod := crashedPod(t)

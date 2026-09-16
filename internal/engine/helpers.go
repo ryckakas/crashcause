@@ -64,7 +64,6 @@ func eventsByReason(in Inputs, reasons ...string) []Event {
 	return out
 }
 
-// firstEventByReason returns the first event with one of the given reasons.
 func firstEventByReason(in Inputs, reasons ...string) (Event, bool) {
 	evs := eventsByReason(in, reasons...)
 	if len(evs) == 0 {
@@ -103,7 +102,6 @@ func eventsForContainer(in Inputs, evs []Event) []Event {
 	return out
 }
 
-// containsFold is a case-insensitive strings.Contains.
 func containsFold(haystack, needle string) bool {
 	return strings.Contains(strings.ToLower(haystack), strings.ToLower(needle))
 }
@@ -117,7 +115,6 @@ func eventCount(e Event) int32 {
 	return e.Count
 }
 
-// totalEventCount sums the occurrence counts of the given events.
 func totalEventCount(evs []Event) int32 {
 	var n int32
 	for _, e := range evs {
@@ -126,7 +123,6 @@ func totalEventCount(evs []Event) int32 {
 	return n
 }
 
-// describeEvent renders an event as a single evidence line.
 func describeEvent(e Event) string {
 	return fmt.Sprintf("event: %s (x%d): %s", e.Reason, eventCount(e), truncateMessage(e.Message))
 }
@@ -184,7 +180,6 @@ func formatDuration(d time.Duration) string {
 	return d.Round(time.Second).String()
 }
 
-// containerNoun describes the container being diagnosed in prose.
 func containerNoun(in Inputs) string {
 	switch effectiveKind(in) {
 	case KindInit:
@@ -198,7 +193,6 @@ func containerNoun(in Inputs) string {
 	}
 }
 
-// containerRef renders "container \"api\"" for use inside explanations.
 func containerRef(in Inputs) string {
 	if in.Container == "" {
 		return containerNoun(in)
@@ -206,7 +200,6 @@ func containerRef(in Inputs) string {
 	return fmt.Sprintf("%s %q", containerNoun(in), in.Container)
 }
 
-// podRef renders the pod for use in suggested commands.
 func podRef(in Inputs) string {
 	pod := in.Pod
 	if pod == "" {
@@ -215,7 +208,6 @@ func podRef(in Inputs) string {
 	return pod
 }
 
-// nsFlag renders "-n <namespace>" for suggested commands.
 func nsFlag(in Inputs) string {
 	ns := in.Namespace
 	if ns == "" {
@@ -224,7 +216,6 @@ func nsFlag(in Inputs) string {
 	return "-n " + ns
 }
 
-// containerFlag renders "-c <container>" for suggested commands.
 func containerFlag(in Inputs) string {
 	if in.Container == "" {
 		return ""
@@ -232,7 +223,6 @@ func containerFlag(in Inputs) string {
 	return " -c " + in.Container
 }
 
-// logsCommand builds the canonical "fetch the crashed container's logs" command.
 func logsCommand(in Inputs, previous bool) string {
 	cmd := fmt.Sprintf("kubectl logs %s %s%s", podRef(in), nsFlag(in), containerFlag(in))
 	if previous {
@@ -241,7 +231,6 @@ func logsCommand(in Inputs, previous bool) string {
 	return cmd
 }
 
-// describeCommand builds "kubectl describe pod ...".
 func describeCommand(in Inputs) string {
 	return fmt.Sprintf("kubectl describe pod %s %s", podRef(in), nsFlag(in))
 }
@@ -250,7 +239,6 @@ func describeCommand(in Inputs) string {
 // Evidence builders shared by several rules
 // ---------------------------------------------------------------------------
 
-// terminationEvidence renders the standard exit-code / reason / signal lines.
 func terminationEvidence(t TerminationState) []string {
 	if !t.Present {
 		return nil
@@ -273,7 +261,6 @@ func terminationEvidence(t TerminationState) []string {
 	return ev
 }
 
-// exitCodeGloss annotates well-known exit codes.
 func exitCodeGloss(code int32) string {
 	switch code {
 	case 126:
@@ -308,7 +295,6 @@ func signalName(sig int32) string {
 	}
 }
 
-// restartEvidence reports the restart count when non-zero.
 func restartEvidence(in Inputs) []string {
 	if in.RestartCount <= 0 {
 		return nil
@@ -337,7 +323,6 @@ func memorySpecEvidence(in Inputs) []string {
 	return ev
 }
 
-// nodePressureEvidence reports collected node conditions that are true.
 func nodePressureEvidence(in Inputs) []string {
 	if !in.Node.Known {
 		return nil
@@ -552,7 +537,6 @@ func normalizeRefKind(s string) string {
 	return "Secret"
 }
 
-// kubectlResource maps a reference kind to the kubectl resource name.
 func kubectlResource(kind string) string {
 	if kind == "ConfigMap" {
 		return "configmap"
@@ -560,7 +544,6 @@ func kubectlResource(kind string) string {
 	return "secret"
 }
 
-// parseVolumeNames extracts volume / claim identifiers from a mount failure message.
 func parseVolumeNames(msg string) []string {
 	var names []string
 	seen := map[string]bool{}
@@ -645,7 +628,6 @@ func parseSchedulingFailure(msg string) schedulingCause {
 	return sc
 }
 
-// parseEvictionResource extracts the exhausted resource from an eviction message.
 func parseEvictionResource(msg string) string {
 	if m := reEvictionResource.FindStringSubmatch(msg); m != nil {
 		return strings.ToLower(strings.TrimSuffix(m[1], "."))
@@ -776,8 +758,6 @@ func logPatterns() []logPattern {
 	}
 }
 
-// scanLogTail returns the recognized failure patterns in the log tail, most
-// specific first, at most one hint per pattern.
 func scanLogTail(lines []string) []logHint {
 	var hints []logHint
 	for _, p := range logPatterns() {

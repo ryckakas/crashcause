@@ -26,7 +26,6 @@ const (
 	watchClientBurst = 30
 )
 
-// watchOptions holds all flag-bound settings for the watch command.
 type watchOptions struct {
 	namespaces      []string
 	selector        string

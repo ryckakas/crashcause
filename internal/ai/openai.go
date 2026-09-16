@@ -5,8 +5,6 @@ import (
 	"net/http"
 )
 
-// openAIProvider talks to the OpenAI chat-completions API over plain
-// net/http.
 type openAIProvider struct {
 	client *client
 }
@@ -30,11 +28,8 @@ type openAIResponse struct {
 	} `json:"choices"`
 }
 
-// Name implements Provider.
 func (p *openAIProvider) Name() string { return ProviderOpenAI }
 
-// Summarize implements Provider.
-//
 // CONTRACT: req must already be redacted. Summarizer.Summarize is the
 // supported entry point and guarantees that; a caller invoking a Provider
 // directly is responsible for redacting first.

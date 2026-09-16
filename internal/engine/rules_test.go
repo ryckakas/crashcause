@@ -11,8 +11,6 @@ import (
 // this package)
 // ---------------------------------------------------------------------------
 
-// rtAssertOnlyImagePull checks that exactly the wanted image-pull cause fired
-// and the other two image-pull causes did not.
 func rtAssertOnlyImagePull(t *testing.T, ds []Diagnosis, want CauseCode) {
 	t.Helper()
 	all := []CauseCode{CauseImagePullAuth, CauseImagePullNotFound, CauseImagePullOther}

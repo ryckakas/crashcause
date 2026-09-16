@@ -250,7 +250,6 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 	}
 
 	if token := strings.TrimSpace(os.Getenv(lokiEnvBearerToken)); token != "" {
-		// Bearer wins over basic auth when both are configured.
 		s.bearerToken = token
 	} else if user := os.Getenv(lokiEnvUsername); user != "" {
 		s.basicUser = user
@@ -263,7 +262,6 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 	return s, nil
 }
 
-// Name identifies the sink in logs and error messages.
 func (s *lokiSink) Name() string { return "loki" }
 
 // Emit queues d for the next batch. It NEVER blocks: the Diagnosis is
@@ -451,7 +449,6 @@ func (s *lokiSink) dropBatch(batch []lokiEntry, err error) {
 	s.errMu.Unlock()
 }
 
-// push performs a single POST of an already-encoded payload.
 func (s *lokiSink) push(body []byte) error {
 	ctx, cancel := context.WithTimeout(s.baseCtx, s.timeout)
 	defer cancel()
@@ -540,7 +537,6 @@ func lokiMarshalLine(d engine.Diagnosis) (string, error) {
 	return strings.TrimRight(buf.String(), "\n"), nil
 }
 
-// lokiSnippet flattens an error-response snippet to a single readable line.
 func lokiSnippet(b []byte) string {
 	s := strings.TrimSpace(string(b))
 	s = strings.ReplaceAll(s, "\r", " ")

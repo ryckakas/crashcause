@@ -12,9 +12,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
-// promNewTestSink returns a Prometheus sink registered on a fresh, isolated
-// registry so tests never see series left over from another test or from
-// prometheus.DefaultRegisterer's own default collectors.
 func promNewTestSink(t *testing.T) *Prometheus {
 	t.Helper()
 	return NewPrometheus(prometheus.NewRegistry())
@@ -86,9 +83,6 @@ func promSampleValue(t *testing.T, p *Prometheus, metric string, labels ...strin
 	return value
 }
 
-// TestPrometheusIncCrash checks that IncCrash creates a series with the
-// expected label values and that repeated increments for the same workload
-// and cause sum rather than overwrite.
 func TestPrometheusIncCrash(t *testing.T) {
 	p := promNewTestSink(t)
 	owner := engine.Owner{Kind: "Deployment", Name: "checkout"}
@@ -116,10 +110,6 @@ func TestPrometheusIncCrash(t *testing.T) {
 	}
 }
 
-// TestPrometheusOwnerNormalization exercises normalizeOwner directly: the
-// CronJobName fold, the two truncation heuristics (in combination and in
-// isolation), pass-through for non-Job kinds and suffix-less names, and the
-// "never truncate to empty" guard.
 func TestPrometheusOwnerNormalization(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -182,9 +172,6 @@ func TestPrometheusOwnerNormalization(t *testing.T) {
 	}
 }
 
-// TestPrometheusForgetSeries checks that ForgetSeries removes every cause
-// series for one workload while leaving a different workload's series (and
-// its own multiple causes) untouched.
 func TestPrometheusForgetSeries(t *testing.T) {
 	p := promNewTestSink(t)
 	appA := engine.Owner{Kind: "Deployment", Name: "app-a"}
@@ -284,8 +271,6 @@ func TestPrometheusLogFetchesSkipped(t *testing.T) {
 	}
 }
 
-// TestPrometheusHandlerServesMetrics checks that Handler() serves the
-// registered series over HTTP in Prometheus text exposition format.
 func TestPrometheusHandlerServesMetrics(t *testing.T) {
 	p := promNewTestSink(t)
 	p.IncCrash("ns1", engine.Owner{Kind: "Deployment", Name: "app-a"}, engine.CauseOOMKilled)

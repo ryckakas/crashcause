@@ -28,8 +28,6 @@ func (e exitCodeError) Error() string {
 	return fmt.Sprintf("exit code %d", e.code)
 }
 
-// exitCode converts a mode's exit code into the error RunE must return: nil
-// for success, an exitCodeError otherwise.
 func exitCode(code int) error {
 	if code == 0 {
 		return nil
@@ -73,8 +71,6 @@ suggested next steps.`,
 	return root
 }
 
-// persistentPreRunE parses --log-level and installs the default slog
-// handler before any subcommand runs.
 func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 	levelStr, err := cmd.Flags().GetString("log-level")
 	if err != nil {

@@ -52,12 +52,7 @@ const (
 	diagnosesMetric = "crashcause_diagnoses_total"
 )
 
-// testBaseTime is where every injected clock starts.
 var testBaseTime = time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
-
-// ---------------------------------------------------------------------------
-// Clock
-// ---------------------------------------------------------------------------
 
 // fakeClock is a manually advanced clock. It is mutex guarded because the
 // controller reads it from informer, worker and sweep goroutines.
@@ -82,10 +77,6 @@ func (c *fakeClock) advance(d time.Duration) {
 	c.now = c.now.Add(d)
 }
 
-// ---------------------------------------------------------------------------
-// Writer
-// ---------------------------------------------------------------------------
-
 // lockedWriter is a mutex-guarded io.Writer. A bare bytes.Buffer would race:
 // the stdout sink writes from worker goroutines while the test reads.
 type lockedWriter struct {
@@ -105,7 +96,6 @@ func (w *lockedWriter) String() string {
 	return w.buf.String()
 }
 
-// lines returns every non-empty line written so far.
 func (w *lockedWriter) lines() []string {
 	var out []string
 	for _, l := range strings.Split(w.String(), "\n") {
@@ -117,7 +107,6 @@ func (w *lockedWriter) lines() []string {
 	return out
 }
 
-// diagnoses decodes every emitted line into a Diagnosis.
 func (w *lockedWriter) diagnoses(t *testing.T) []engine.Diagnosis {
 	t.Helper()
 	lines := w.lines()
@@ -131,10 +120,6 @@ func (w *lockedWriter) diagnoses(t *testing.T) []engine.Diagnosis {
 	}
 	return out
 }
-
-// ---------------------------------------------------------------------------
-// Controller construction
-// ---------------------------------------------------------------------------
 
 // newTestController builds a controller on a fake clientset with the injected
 // clock wired into Config.clock (and therefore into the collector, the engine's
@@ -170,10 +155,6 @@ func dedupConfig(ttl, reemit time.Duration) Config {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Pod fixtures
-// ---------------------------------------------------------------------------
-
 func boolPtr(b bool) *bool { return &b }
 
 // replicaSetRef is the controlling ownerReference shared by a pod and its
@@ -188,7 +169,6 @@ func replicaSetRef() metav1.OwnerReference {
 	}
 }
 
-// basePod is a scheduled, ReplicaSet-owned pod with no container statuses.
 func basePod(name string, uid types.UID) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -301,11 +281,6 @@ func testOwner() engine.Owner {
 	return engine.Owner{Kind: testOwnerKind, Name: testOwnerName}
 }
 
-// ---------------------------------------------------------------------------
-// /metrics scraping
-// ---------------------------------------------------------------------------
-
-// promSample is one parsed line of Prometheus exposition text.
 type promSample struct {
 	labels map[string]string
 	value  float64
@@ -390,14 +365,11 @@ func parseValue(t *testing.T, s string) float64 {
 	return v
 }
 
-// diagnosesSamples returns every crashcause_diagnoses_total sample currently
-// exposed.
 func diagnosesSamples(t *testing.T, c *Controller) []promSample {
 	t.Helper()
 	return parseSamples(t, scrapeMetrics(t, c), diagnosesMetric)
 }
 
-// workloadSamples narrows the samples to the canonical test workload.
 func workloadSamples(t *testing.T, c *Controller) []promSample {
 	t.Helper()
 	var out []promSample
@@ -411,7 +383,6 @@ func workloadSamples(t *testing.T, c *Controller) []promSample {
 	return out
 }
 
-// causeCount returns the counter value for one cause of the canonical workload.
 func causeCount(t *testing.T, c *Controller, cause engine.CauseCode) (float64, bool) {
 	t.Helper()
 	for _, s := range workloadSamples(t, c) {
@@ -422,7 +393,6 @@ func causeCount(t *testing.T, c *Controller, cause engine.CauseCode) (float64, b
 	return 0, false
 }
 
-// requireCauseCount asserts the exact counter value for one cause.
 func requireCauseCount(t *testing.T, c *Controller, cause engine.CauseCode, want float64) {
 	t.Helper()
 	got, ok := causeCount(t, c, cause)
@@ -434,7 +404,6 @@ func requireCauseCount(t *testing.T, c *Controller, cause engine.CauseCode, want
 	}
 }
 
-// requireLineCount asserts exactly n emissions have been written.
 func requireLineCount(t *testing.T, w *lockedWriter, n int) {
 	t.Helper()
 	if got := len(w.lines()); got != n {
@@ -442,7 +411,6 @@ func requireLineCount(t *testing.T, w *lockedWriter, n int) {
 	}
 }
 
-// waitFor polls cond until it holds or the timeout expires.
 func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

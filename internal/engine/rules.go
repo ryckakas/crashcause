@@ -25,19 +25,16 @@ func oomMatched(in Inputs) bool {
 	return t.Present && strings.EqualFold(t.Reason, "OOMKilled")
 }
 
-// sigkillTermination reports exit 137 / SIGKILL regardless of attribution.
 func sigkillTermination(in Inputs) bool {
 	t := effectiveTermination(in)
 	return t.Present && (t.ExitCode == 137 || t.Signal == 9)
 }
 
-// sigtermTermination reports exit 143 / SIGTERM.
 func sigtermTermination(in Inputs) bool {
 	t := effectiveTermination(in)
 	return t.Present && (t.ExitCode == 143 || t.Signal == 15)
 }
 
-// evictionContext returns the eviction message and whether the pod was evicted.
 func evictionContext(in Inputs) (string, bool) {
 	evicted := strings.EqualFold(in.PodReason, "Evicted")
 	e, hasEvent := firstEventByReason(in, "Evicted")
@@ -70,7 +67,6 @@ func livenessProbeContext(in Inputs) (unhealthy, killing []Event, ok bool) {
 	return unhealthy, killing, true
 }
 
-// startupProbeContext is the startup-probe equivalent of livenessProbeContext.
 func startupProbeContext(in Inputs) (unhealthy, killing []Event, ok bool) {
 	if effectiveKind(in) != KindApp {
 		return nil, nil, false
@@ -97,12 +93,10 @@ func probeKillMatched(in Inputs) bool {
 	return ok
 }
 
-// volumeMountEvents returns the mount/attach failure events for the pod.
 func volumeMountEvents(in Inputs) []Event {
 	return eventsByReason(in, "FailedMount", "FailedAttachVolume", "FailedMapVolume")
 }
 
-// schedulingEvents returns the FailedScheduling events for a Pending pod.
 func schedulingEvents(in Inputs) []Event {
 	if !strings.EqualFold(in.PodPhase, "Pending") {
 		return nil
@@ -1346,7 +1340,6 @@ func somethingIsWrong(in Inputs) bool {
 	return false
 }
 
-// isProblemWaitingReason filters out the transient, normal waiting reasons.
 func isProblemWaitingReason(reason string) bool {
 	switch strings.ToLower(reason) {
 	case "", "containercreating", "podinitializing":

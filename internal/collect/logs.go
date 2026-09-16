@@ -60,8 +60,6 @@ func (c *Collector) logTail(ctx context.Context, pod *corev1.Pod, container stri
 	return out, false
 }
 
-// splitLogLines splits a log blob into lines, normalising CRLF and dropping
-// the empty line produced by a trailing newline.
 func splitLogLines(raw string) []string {
 	if raw == "" {
 		return nil

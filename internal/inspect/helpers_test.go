@@ -30,14 +30,11 @@ const (
 	testImage      = "registry.example.com/app:1.2.3"
 )
 
-// newClient builds a fake clientset seeded with the given objects.
 func newClient(t *testing.T, objs ...runtime.Object) *fake.Clientset {
 	t.Helper()
 	return fake.NewClientset(objs...)
 }
 
-// appContainerSpec is a container spec with resources and a liveness probe
-// set, matching the fixtures below.
 func appContainerSpec(name string) corev1.Container {
 	return corev1.Container{
 		Name:  name,
@@ -55,8 +52,6 @@ func appContainerSpec(name string) corev1.Container {
 	}
 }
 
-// basePod is a minimal scheduled pod with a single app container and no
-// container statuses.
 func basePod(t *testing.T) *corev1.Pod {
 	t.Helper()
 	return &corev1.Pod{
@@ -110,8 +105,6 @@ func crashedStatus(name string, now time.Time) corev1.ContainerStatus {
 	return oomKilledStatus(name, now)
 }
 
-// oomKilledPod is the canonical OOM fixture: one app container in
-// CrashLoopBackOff after an OOMKill.
 func oomKilledPod(t *testing.T, now time.Time) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)
@@ -119,7 +112,6 @@ func oomKilledPod(t *testing.T, now time.Time) *corev1.Pod {
 	return pod
 }
 
-// healthyPod is a running pod that warrants no diagnosis at all.
 func healthyPod(t *testing.T, now time.Time) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)
@@ -163,8 +155,6 @@ func appExitStatus(name string, now time.Time) corev1.ContainerStatus {
 	}
 }
 
-// appExitPod is the canonical app_exit_nonzero fixture: single app container,
-// plain exit 1, no Kubernetes-side cause.
 func appExitPod(t *testing.T, now time.Time) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)
@@ -206,7 +196,6 @@ func probeFailurePod(t *testing.T, now time.Time) *corev1.Pod {
 	return pod
 }
 
-// podEvent builds an event for the canonical pod.
 func podEvent(name, evType, reason, message string, count int32, last time.Time) *corev1.Event {
 	return &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
@@ -225,7 +214,6 @@ func podEvent(name, evType, reason, message string, count int32, last time.Time)
 	}
 }
 
-// multiContainerCrashedPod has two app containers, both OOM-killed.
 func multiContainerCrashedPod(t *testing.T, now time.Time) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)

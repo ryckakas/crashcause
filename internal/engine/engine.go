@@ -30,7 +30,6 @@ func (r Rule) appliesToKind(kind ContainerKind) bool {
 	return false
 }
 
-// allKinds is the applicability set for pod-level rules.
 func allKinds() []ContainerKind {
 	return []ContainerKind{KindApp, KindInit, KindEphemeral}
 }
@@ -129,7 +128,6 @@ func isLifecycleNoise(in Inputs) bool {
 	return t.ExitCode == 143 || t.Signal == 15
 }
 
-// finalize stamps pod identity and the diagnosis timestamp onto a Diagnosis.
 func finalize(d *Diagnosis, in Inputs) {
 	d.Pod = in.Pod
 	d.Namespace = in.Namespace

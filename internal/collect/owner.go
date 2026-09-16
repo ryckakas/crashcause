@@ -16,7 +16,6 @@ import (
 // cache turns O(crashes) API calls into O(workloads) per TTL window.
 const ownerCacheTTL = 10 * time.Minute
 
-// Owner kinds handled specially during resolution.
 const (
 	kindReplicaSet  = "ReplicaSet"
 	kindDeployment  = "Deployment"
@@ -72,7 +71,6 @@ func (c *Collector) resolveOwner(ctx context.Context, pod *corev1.Pod) (engine.O
 	return owner, ref.Kind
 }
 
-// cachedOwner returns a cached owner when present and unexpired.
 func (c *Collector) cachedOwner(uid types.UID) (engine.Owner, bool) {
 	if uid == "" {
 		return engine.Owner{}, false
@@ -86,7 +84,6 @@ func (c *Collector) cachedOwner(uid types.UID) (engine.Owner, bool) {
 	return entry.owner, true
 }
 
-// storeOwner caches a resolution (successful or degraded) under the owner UID.
 func (c *Collector) storeOwner(uid types.UID, owner engine.Owner) {
 	if uid == "" {
 		return
@@ -108,7 +105,6 @@ func podOwnerRef(pod *corev1.Pod) *metav1.OwnerReference {
 	return &pod.OwnerReferences[0]
 }
 
-// controllerOwnerRef returns the reference marked Controller=true, if any.
 func controllerOwnerRef(refs []metav1.OwnerReference) *metav1.OwnerReference {
 	for i := range refs {
 		if ref := &refs[i]; ref.Controller != nil && *ref.Controller {

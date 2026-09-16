@@ -36,24 +36,19 @@ const (
 	testImage     = "registry.example.com/app:1.2.3"
 )
 
-// fixedNow is the frozen clock every test injects through Options.Now.
 var fixedNow = time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
 
-// testOptions returns DefaultOptions with the clock frozen at fixedNow.
 func testOptions() Options {
 	opts := DefaultOptions()
 	opts.Now = func() time.Time { return fixedNow }
 	return opts
 }
 
-// newClient builds a fake clientset seeded with the given objects.
 func newClient(t *testing.T, objs ...runtime.Object) *fake.Clientset {
 	t.Helper()
 	return fake.NewClientset(objs...)
 }
 
-// crashedStatus is a container status for a container that OOMed and is now
-// backing off: lastState.terminated exit 137 / OOMKilled, restartCount 5.
 func crashedStatus(name string) corev1.ContainerStatus {
 	return corev1.ContainerStatus{
 		Name:         name,
@@ -78,8 +73,6 @@ func crashedStatus(name string) corev1.ContainerStatus {
 	}
 }
 
-// appContainerSpec is the spec matching crashedStatus: resources set and a
-// liveness probe that only sets failureThreshold (everything else defaulted).
 func appContainerSpec(name string) corev1.Container {
 	return corev1.Container{
 		Name:  name,
@@ -97,7 +90,6 @@ func appContainerSpec(name string) corev1.Container {
 	}
 }
 
-// basePod is a minimal scheduled pod with no container statuses.
 func basePod(t *testing.T) *corev1.Pod {
 	t.Helper()
 	return &corev1.Pod{
@@ -118,8 +110,6 @@ func basePod(t *testing.T) *corev1.Pod {
 	}
 }
 
-// crashedPod is the canonical fixture: one app container in CrashLoopBackOff
-// after an OOMKill.
 func crashedPod(t *testing.T) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)
@@ -127,7 +117,6 @@ func crashedPod(t *testing.T) *corev1.Pod {
 	return pod
 }
 
-// healthyPod is a running pod that warrants no diagnosis at all.
 func healthyPod(t *testing.T) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)
@@ -144,7 +133,6 @@ func healthyPod(t *testing.T) *corev1.Pod {
 	return pod
 }
 
-// pendingPod is an unscheduled pod: Pending phase, no node, no statuses.
 func pendingPod(t *testing.T) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)
@@ -154,7 +142,6 @@ func pendingPod(t *testing.T) *corev1.Pod {
 	return pod
 }
 
-// podEvent builds an event for the canonical pod.
 func podEvent(name, evType, reason, message string, count int32, last time.Time) *corev1.Event {
 	return &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
@@ -193,7 +180,6 @@ func otherPodEvent() *corev1.Event {
 	}
 }
 
-// testNode builds a node whose pressure conditions are set as given.
 func testNode(memory, disk, pid corev1.ConditionStatus) *corev1.Node {
 	return &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: testNodeName},
@@ -208,7 +194,6 @@ func testNode(memory, disk, pid corev1.ConditionStatus) *corev1.Node {
 	}
 }
 
-// controllerRef builds a controlling ownerReference.
 func controllerRef(kind, name, uid string) metav1.OwnerReference {
 	controller := true
 	return metav1.OwnerReference{
@@ -219,7 +204,6 @@ func controllerRef(kind, name, uid string) metav1.OwnerReference {
 	}
 }
 
-// matchingActions returns the recorded actions matching verb/resource/subresource.
 func matchingActions(t *testing.T, cs *fake.Clientset, verb, res, subresource string) []k8stesting.Action {
 	t.Helper()
 	var out []k8stesting.Action
@@ -232,7 +216,6 @@ func matchingActions(t *testing.T, cs *fake.Clientset, verb, res, subresource st
 	return out
 }
 
-// logActions returns the PodLogOptions of every recorded pods/log action.
 func logActions(t *testing.T, cs *fake.Clientset) []*corev1.PodLogOptions {
 	t.Helper()
 	var out []*corev1.PodLogOptions
@@ -253,7 +236,6 @@ func logActions(t *testing.T, cs *fake.Clientset) []*corev1.PodLogOptions {
 	return out
 }
 
-// countActions counts recorded actions matching verb/resource/subresource.
 func countActions(t *testing.T, cs *fake.Clientset, verb, res, subresource string) int {
 	t.Helper()
 	return len(matchingActions(t, cs, verb, res, subresource))

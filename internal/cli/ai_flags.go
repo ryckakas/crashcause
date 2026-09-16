@@ -18,8 +18,6 @@ import (
 // flag (ps leakage) and never logged.
 const apiKeyEnv = "CRASHCAUSE_AI_API_KEY"
 
-// aiOptions holds the AI-summary flags shared by inspect and watch. Values
-// are bound directly by addAIFlags so both commands stay consistent.
 type aiOptions struct {
 	enabled     bool
 	provider    string
@@ -31,8 +29,6 @@ type aiOptions struct {
 	redactExtra string
 }
 
-// addAIFlags registers the AI-summary flags on fs, shared verbatim between
-// the inspect and watch commands.
 func (o *aiOptions) addAIFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&o.enabled, "ai", false, "generate an AI natural-language summary of the diagnosis")
 	fs.StringVar(&o.provider, "ai-provider", "anthropic", "AI provider to use: anthropic|openai|ollama")
@@ -88,8 +84,6 @@ func (o *aiOptions) buildSummarizer(errOut io.Writer) (*ai.Summarizer, error) {
 	return ai.NewSummarizerWithTimeout(provider, redactor, o.timeout), nil
 }
 
-// readRedactPatterns loads one regex per line from path, skipping blank
-// lines and #-comments. An empty path returns no patterns.
 func readRedactPatterns(path string) ([]string, error) {
 	if path == "" {
 		return nil, nil

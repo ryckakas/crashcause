@@ -12,8 +12,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/ai"
 )
 
-// --- 6. AI success path -------------------------------------------------------
-
 func TestRunAISuccess(t *testing.T) {
 	now := time.Now()
 	cs := newClient(t, appExitPod(t, now))
@@ -85,8 +83,6 @@ func TestRunAISuccess(t *testing.T) {
 	})
 }
 
-// --- 7. AI failure path -------------------------------------------------------
-
 func TestRunAIFailure(t *testing.T) {
 	now := time.Now()
 	cs := newClient(t, appExitPod(t, now))
@@ -119,8 +115,6 @@ func TestRunAIFailure(t *testing.T) {
 		t.Errorf("stderr line = %q, want it to start with %q", errLines[0], "AI summary unavailable:")
 	}
 }
-
-// --- 8. AI gate closed for non-eligible causes -------------------------------
 
 func TestRunAIGateClosedForOOM(t *testing.T) {
 	now := time.Now()

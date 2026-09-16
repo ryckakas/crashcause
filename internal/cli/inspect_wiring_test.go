@@ -37,7 +37,7 @@ func TestExitCodeForMapping(t *testing.T) {
 		name      string
 		err       error
 		wantCode  int
-		wantPrint string // substring expected on stderr, "" means nothing printed
+		wantPrint string
 	}{
 		{name: "success", err: nil, wantCode: 0},
 		{name: "nothing to diagnose is passed through silently", err: exitCode(2), wantCode: 2},
@@ -74,8 +74,6 @@ func TestExitCodeForMapping(t *testing.T) {
 	}
 }
 
-// kubeconfigFile writes a kubeconfig whose current context carries the given
-// namespace (empty means the context sets none) and returns its path.
 func kubeconfigFile(t *testing.T, namespace string) string {
 	t.Helper()
 	nsLine := ""
