@@ -1,3 +1,5 @@
+![crashcause](docs/images/cover-hero.jpg)
+
 # crashcause
 
 Answers "why did this pod crash?" from live cluster state — no copy-pasting `describe`
@@ -23,7 +25,7 @@ an OOM kill or a failed probe. `crashcause` automates that correlation and turns
 *cause* of a crash — not just the fact that one happened — into a first-class, queryable
 signal.
 
-Two things differentiate it from "paste your logs into a UI" tools:
+Three things differentiate it from "paste your logs into a UI" tools:
 
 1. **Zero copy-paste, live-cluster.** It talks to the Kubernetes API directly: pod status,
    container states, events, previous-container logs, and node conditions. You point it at
@@ -34,6 +36,11 @@ Two things differentiate it from "paste your logs into a UI" tools:
    `kube-state-metrics` tells you a pod is in `CrashLoopBackOff`, `crashcause` tells you
    *why*, as a queryable dimension: `oom_killed` vs. `probe_liveness_failure` vs.
    `config_missing_reference`, filterable and alertable in Grafana with no extra tooling.
+3. **Optional AI layer, BYO-key.** When the rule engine lands on `app_exit_nonzero` or
+   `unknown` — an application bug the rules can't interpret any further — an opt-in layer
+   (`--ai`, default off) sends the log tail and diagnosis evidence to your own
+   `anthropic`/`openai`/`ollama` key for a short natural-language summary. See
+   [AI layer](#ai-layer-optional-default-off) for exactly what is and is never sent.
 
 ## Cause codes
 
