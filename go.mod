@@ -1,12 +1,12 @@
 module github.com/ryckakas/crashcause
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	k8s.io/api v0.35.8
 	k8s.io/apimachinery v0.35.8
 	k8s.io/cli-runtime v0.35.8
