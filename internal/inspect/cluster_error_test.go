@@ -39,7 +39,7 @@ func TestExplainClusterFailure(t *testing.T) {
 		err          error
 		server       string
 		wantReason   string
-		wantVerbatim bool // the error must be returned untouched
+		wantVerbatim bool
 	}{
 		{
 			name:       "credential plugin failure",

@@ -209,8 +209,8 @@ func TestSummarizerProviderAccessor(t *testing.T) {
 	}
 }
 
-// TestSummarizerEndToEndWithRealProvider wires the real HTTP client behind the
-// Summarizer to prove redaction happens on the wire, not just in the fake.
+// TestSummarizerEndToEndRedactsOnTheWire wires the real HTTP client behind
+// the Summarizer to prove redaction happens on the wire, not just in the fake.
 func TestSummarizerEndToEndRedactsOnTheWire(t *testing.T) {
 	srv, rec := newTestServer(t, 200, `{"message":{"content":"Postgres refused the connection."}}`)
 	p, err := New(Config{Provider: ProviderOllama, BaseURL: srv.URL})

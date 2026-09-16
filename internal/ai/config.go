@@ -38,11 +38,8 @@ const (
 
 	anthropicVersion = "2023-06-01"
 
-	// maxErrorBodyChars bounds how much of a provider error body is quoted
-	// back in an error string.
 	maxErrorBodyChars = 200
-	// maxResponseBytes bounds how much of a response body is read at all.
-	maxResponseBytes = 1 << 20
+	maxResponseBytes  = 1 << 20
 )
 
 // Sentinel errors returned by this package.
@@ -208,7 +205,6 @@ func (c *client) safeBody(raw []byte) string {
 	return truncate(s)
 }
 
-// truncate bounds a provider body quoted into an error message.
 func truncate(s string) string {
 	runes := []rune(s)
 	if len(runes) <= maxErrorBodyChars {

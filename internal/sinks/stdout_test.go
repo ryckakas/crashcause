@@ -12,7 +12,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
-// stdoutTestDiagnosis returns a fully-populated Diagnosis fixture.
 func stdoutTestDiagnosis() engine.Diagnosis {
 	return engine.Diagnosis{
 		Cause:       engine.CauseOOMKilled,

@@ -475,7 +475,6 @@ func (c *Controller) emit(ctx context.Context, d engine.Diagnosis) {
 	}
 }
 
-// recordWorkload attaches the resolved workload identity to a pod's record.
 func (c *Controller) recordWorkload(uid types.UID, namespace string, owner engine.Owner, podName string) {
 	wk := workloadKeyFor(namespace, owner, podName)
 	c.mu.Lock()
@@ -556,8 +555,6 @@ func (c *Controller) sweepLoop(ctx context.Context) {
 	}
 }
 
-// sweepDedup runs one eviction pass and retires the metric series of every
-// workload that lost its last key.
 func (c *Controller) sweepDedup() {
 	for _, f := range c.cache.sweep() {
 		c.forgetSeriesUnlessShared(f.namespace, f.owner)
@@ -581,7 +578,6 @@ func (c *Controller) logSkipLoop(ctx context.Context) {
 	}
 }
 
-// reportLogSkips reports the delta since the last poll.
 func (c *Controller) reportLogSkips() {
 	total := c.logCollector.LogFetchesSkipped()
 	prev := c.lastLogSkips.Swap(total)
@@ -614,7 +610,6 @@ func (c *Controller) closeSinks(ctx context.Context) {
 	})
 }
 
-// namespacesForLog renders the namespace allowlist for the startup log line.
 func namespacesForLog(ns []string) string {
 	if len(ns) == 0 {
 		return "(all)"

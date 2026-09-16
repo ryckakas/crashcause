@@ -25,8 +25,6 @@ type containerSpecView struct {
 	startup   *corev1.Probe
 }
 
-// findContainerSpec locates the spec of the named container in any of the
-// pod's three container lists. It returns nil when there is no match.
 func findContainerSpec(pod *corev1.Pod, name string) *containerSpecView {
 	if name == "" {
 		return nil
@@ -68,7 +66,6 @@ func findContainerSpec(pod *corev1.Pod, name string) *containerSpecView {
 	return nil
 }
 
-// probeSpec projects a probe, applying kubelet defaults for unset fields.
 func probeSpec(p *corev1.Probe) engine.ProbeSpec {
 	if p == nil {
 		return engine.ProbeSpec{}
@@ -92,7 +89,6 @@ func probeSpec(p *corev1.Probe) engine.ProbeSpec {
 	return out
 }
 
-// resourceMap renders a ResourceList as plain strings, or nil when empty.
 func resourceMap(list corev1.ResourceList) map[string]string {
 	if len(list) == 0 {
 		return nil

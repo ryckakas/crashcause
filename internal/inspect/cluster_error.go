@@ -49,8 +49,6 @@ func explainClusterFailure(err error, server string) error {
 	return fmt.Errorf("cannot reach or authenticate to %s: %s — %s: %w", subject, reason, clusterAdvice, err)
 }
 
-// clusterFailureReason reports whether err is a connectivity or credential
-// failure, and how to describe it.
 func clusterFailureReason(err error) (string, bool) {
 	if err == nil {
 		return "", false

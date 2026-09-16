@@ -29,7 +29,6 @@ type Diagnosis struct {
 	AISummary *string `json:"ai_summary"`
 }
 
-// newDiagnosis projects an engine diagnosis into its JSON form.
 func newDiagnosis(d engine.Diagnosis) Diagnosis {
 	return Diagnosis{Diagnosis: d, AISummary: d.AISummary}
 }
@@ -56,8 +55,6 @@ func renderHuman(w io.Writer, results []containerResult, verbose bool) error {
 	return bw.err
 }
 
-// renderContainer writes one container's block: header, explanation, evidence,
-// next steps, optional AI summary, optional secondary matches.
 func renderContainer(bw *errWriter, res containerResult, verbose bool) {
 	d := res.primary()
 	if d == nil {
@@ -133,8 +130,6 @@ func renderJSON(w io.Writer, namespace, pod string, results []containerResult, v
 	return nil
 }
 
-// oneLine collapses a multi-line explanation onto a single line, for the
-// one-line-per-match secondary listing.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
@@ -169,7 +164,6 @@ func (e *errWriter) bullet(s string) {
 	}
 }
 
-// indented writes a possibly multi-line paragraph with a fixed indent.
 func (e *errWriter) indented(indent, s string) {
 	for _, l := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
 		e.linef("%s%s", indent, l)

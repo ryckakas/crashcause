@@ -141,7 +141,6 @@ func shutdownServers(ctx context.Context, servers []*http.Server) {
 	}
 }
 
-// setBoundAddrs publishes the addresses the listeners actually bound to.
 func (c *Controller) setBoundAddrs(health, metrics string) {
 	c.addrMu.Lock()
 	defer c.addrMu.Unlock()

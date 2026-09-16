@@ -16,10 +16,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
-// ---------------------------------------------------------------------------
-// fixtures
-// ---------------------------------------------------------------------------
-
 // lokiWireStream / lokiWirePush mirror the on-the-wire push payload
 // independently of the production types, so a change to the production
 // structs cannot silently change what the tests believe the wire looks like.
@@ -148,7 +144,6 @@ func lokiTestDiagnosis(ns string, cause engine.CauseCode, ts time.Time) engine.D
 	}
 }
 
-// lokiNewSink builds a sink pointed at ts and registers a bounded Close.
 func lokiNewSink(t *testing.T, ts *lokiTestServer, cfg LokiConfig) LokiSink {
 	t.Helper()
 	cfg.URL = ts.srv.URL
@@ -172,7 +167,6 @@ func lokiCloseSink(t *testing.T, s Sink) {
 	}
 }
 
-// lokiAssertLabels checks the stream carries EXACTLY {app, namespace, cause}.
 func lokiAssertLabels(t *testing.T, got map[string]string, ns, cause string) {
 	t.Helper()
 	if len(got) != 3 {
@@ -185,10 +179,6 @@ func lokiAssertLabels(t *testing.T, got map[string]string, ns, cause string) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// tests
-// ---------------------------------------------------------------------------
 
 func TestLokiNewValidatesURL(t *testing.T) {
 	t.Parallel()

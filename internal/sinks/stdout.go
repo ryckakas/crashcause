@@ -37,7 +37,6 @@ func NewStdout(w io.Writer) Sink {
 	return &stdoutSink{enc: enc}
 }
 
-// Name identifies the sink in logs and error messages.
 func (s *stdoutSink) Name() string { return "stdout" }
 
 // Emit marshals d as one JSON object followed by a newline. It never blocks on

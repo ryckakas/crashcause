@@ -109,8 +109,6 @@ type Config struct {
 	sweepInterval time.Duration
 }
 
-// withDefaults returns a copy of cfg with every unset field that has a
-// documented default filled in.
 func (cfg Config) withDefaults() Config {
 	if cfg.ReemitInterval <= 0 {
 		cfg.ReemitInterval = defaultReemitInterval

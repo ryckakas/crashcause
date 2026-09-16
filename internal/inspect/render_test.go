@@ -15,8 +15,6 @@ import (
 // container <name>" identity and the cause: see renderContainer in render.go.
 const headerSep = " — "
 
-// --- 1 & 2. OOM-killed pod: human and JSON -----------------------------------
-
 func TestRunOOMKilledPodHuman(t *testing.T) {
 	now := time.Now()
 	cs := newClient(t, oomKilledPod(t, now))
@@ -94,8 +92,6 @@ func TestRunOOMKilledPodJSON(t *testing.T) {
 	}
 }
 
-// --- 9. verbose secondary matches --------------------------------------------
-//
 // Fixture (probeFailurePod): a currently-Running app container with a
 // harmless exit-0 LAST termination (RestartCount>0, RestartPolicy OnFailure
 // so completed_restart_loop does not also fire — see the fixture's comment
@@ -216,8 +212,6 @@ func TestRunVerboseSecondaryMatches(t *testing.T) {
 		t.Errorf("verbose diagnoses (%d) not strictly greater than non-verbose (%d)", verboseCount, nonVerboseCount)
 	}
 }
-
-// --- 10. multi-container pod, two crashing app containers --------------------
 
 func TestRunMultiContainerBothCrashing(t *testing.T) {
 	now := time.Now()

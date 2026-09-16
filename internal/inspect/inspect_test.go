@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// --- 3. healthy pod: nothing to diagnose ------------------------------------
-
 func TestRunHealthyPodNothingToDiagnose(t *testing.T) {
 	now := time.Now()
 
@@ -61,10 +59,8 @@ func TestRunHealthyPodNothingToDiagnose(t *testing.T) {
 	})
 }
 
-// --- 4. missing pod ----------------------------------------------------------
-
 func TestRunMissingPod(t *testing.T) {
-	cs := newClient(t) // empty: no pod seeded
+	cs := newClient(t)
 
 	var out, errOut bytes.Buffer
 	opts := Options{
@@ -86,8 +82,6 @@ func TestRunMissingPod(t *testing.T) {
 		t.Errorf("stdout = %q, want empty", out.String())
 	}
 }
-
-// --- 5. container filter naming a nonexistent container --------------------
 
 func TestRunUnknownContainerFilter(t *testing.T) {
 	now := time.Now()
@@ -115,8 +109,6 @@ func TestRunUnknownContainerFilter(t *testing.T) {
 	}
 }
 
-// --- validate(): bad --output value -----------------------------------------
-
 func TestRunInvalidOutput(t *testing.T) {
 	now := time.Now()
 	cs := newClient(t, oomKilledPod(t, now))
@@ -139,8 +131,6 @@ func TestRunInvalidOutput(t *testing.T) {
 		t.Errorf("stderr = %q, want it to mention the bad output value", errOut.String())
 	}
 }
-
-// --- validate(): no pod name -------------------------------------------------
 
 func TestRunNoPodName(t *testing.T) {
 	cs := newClient(t)

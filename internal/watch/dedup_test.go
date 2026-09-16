@@ -7,7 +7,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
-// key builds an emission key for the canonical test workload.
 func key(container string, cause engine.CauseCode) emissionKey {
 	return emissionKey{workload: testWorkloadKey(), container: container, cause: cause}
 }

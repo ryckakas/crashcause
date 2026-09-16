@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// anthropicProvider talks to the Anthropic Messages API over plain net/http.
 type anthropicProvider struct {
 	client *client
 }
@@ -30,11 +29,8 @@ type anthropicResponse struct {
 	} `json:"content"`
 }
 
-// Name implements Provider.
 func (p *anthropicProvider) Name() string { return ProviderAnthropic }
 
-// Summarize implements Provider.
-//
 // CONTRACT: req must already be redacted. Summarizer.Summarize is the
 // supported entry point and guarantees that; a caller invoking a Provider
 // directly is responsible for redacting first.

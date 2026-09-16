@@ -33,7 +33,6 @@ var (
 	// image digests and build IDs are not destroyed.
 	awsSecretRe = regexp.MustCompile(`(?i)\b(aws[_-]?secret[_-]?(?:access[_-]?)?key)("?\s*[:=]\s*)("?)[A-Za-z0-9/+=]{40}("?)`)
 
-	// AWS access key IDs.
 	awsAccessKeyIDRe = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
 
 	// key=value / key: value where the key ENDS WITH a sensitive word. The
@@ -42,7 +41,6 @@ var (
 	// DB_PASSWORD=..., x-api-key: ... and aws_secret_access_key=...
 	keyValueRe = regexp.MustCompile(`(?i)\b([A-Za-z0-9_.\-]*(?:api[_-]?key|apikey|password|passwd|pwd|secret|access[_-]?key|token|auth))("?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)`)
 
-	// JWT-shaped strings.
 	jwtRe = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*`)
 
 	// Bare IPv4 addresses — opt-in only. Any :port is left alone because the
@@ -228,8 +226,6 @@ func scrubValue(value string) string {
 	return redactedPlaceholder
 }
 
-// unquote splits a "..." or '...' value into its inner text and quote
-// character. ok is false when the value is not quoted.
 func unquote(value string) (inner, quote string, ok bool) {
 	if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
 		return value[1 : len(value)-1], string(value[0]), true

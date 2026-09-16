@@ -33,11 +33,8 @@ type ollamaResponse struct {
 	} `json:"message"`
 }
 
-// Name implements Provider.
 func (p *ollamaProvider) Name() string { return ProviderOllama }
 
-// Summarize implements Provider.
-//
 // CONTRACT: req must already be redacted. Summarizer.Summarize is the
 // supported entry point and guarantees that; a caller invoking a Provider
 // directly is responsible for redacting first.

@@ -126,7 +126,6 @@ func Run(ctx context.Context, client kubernetes.Interface, opts Options) int {
 	return ExitDiagnosed
 }
 
-// withDefaults fills in the fields a caller may legitimately leave zero.
 func (o Options) withDefaults() Options {
 	if o.Out == nil {
 		o.Out = os.Stdout
@@ -143,7 +142,6 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// validate rejects option combinations that cannot produce a report.
 func (o Options) validate() error {
 	if o.Pod == "" {
 		return errors.New("no pod name given")
@@ -164,9 +162,6 @@ func (o Options) fail(err error) int {
 	return ExitError
 }
 
-// collectInputs builds a collector configured for inspect mode and gathers the
-// engine inputs for the pod.
-//
 // Inspect runs with the invoking user's own credentials against a single pod,
 // so it deliberately uses no log rate limiter (spec §8: the limiter exists to
 // stop watch mode from DoSing the API server during a crash storm).
@@ -189,7 +184,6 @@ func (o Options) collectInputs(ctx context.Context, client kubernetes.Interface)
 	return inputs, nil
 }
 
-// describeCollectError turns a collector error into a short, actionable line.
 // The wrapped API error is preserved for anything we do not recognize.
 func (o Options) describeCollectError(err error) error {
 	switch {
@@ -204,9 +198,8 @@ func (o Options) describeCollectError(err error) error {
 	}
 }
 
-// classify runs the engine over every collected container and keeps only the
-// containers that produced at least one diagnosis. An empty engine result means
-// "normal lifecycle, nothing wrong" and must not be reported as a finding.
+// An empty engine result means "normal lifecycle, nothing wrong" and must not
+// be reported as a finding.
 func classify(inputs []engine.Inputs) []containerResult {
 	var out []containerResult
 	for _, in := range inputs {
@@ -219,8 +212,6 @@ func classify(inputs []engine.Inputs) []containerResult {
 	return out
 }
 
-// reportNothingToDiagnose renders the exit-2 case: the pod exists and was
-// inspected successfully, but nothing about it is wrong.
 func (o Options) reportNothingToDiagnose(inputs []engine.Inputs) int {
 	msg := fmt.Sprintf("pod %s/%s: nothing to diagnose (pod is not crashing)", o.Namespace, o.Pod)
 
@@ -313,7 +304,6 @@ func aiNotice(err error) string {
 	return prefix + msg
 }
 
-// cutPrefixFold is strings.CutPrefix with ASCII case folding.
 func cutPrefixFold(s, prefix string) (string, bool) {
 	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
 		return s, false
@@ -321,7 +311,6 @@ func cutPrefixFold(s, prefix string) (string, bool) {
 	return s[len(prefix):], true
 }
 
-// render writes the report in the configured output format.
 func (o Options) render(results []containerResult) error {
 	if o.Output == OutputJSON {
 		return renderJSON(o.Out, o.Namespace, o.Pod, results, o.Verbose)

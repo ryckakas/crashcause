@@ -49,8 +49,6 @@ type causeKey struct {
 	container string
 }
 
-// dedupEntry is the cached state of a single emission key.
-//
 // owner is stored verbatim (not just its string form) because
 // sinks.Prometheus.ForgetSeries must be called with the SAME engine.Owner
 // value IncCrash was called with: normalization is self-consistent, not

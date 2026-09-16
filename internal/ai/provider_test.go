@@ -40,7 +40,6 @@ func (rec *recorder) snapshot() (string, http.Header, map[string]any) {
 	return rec.path, rec.header, rec.body
 }
 
-// newTestServer records the incoming request and replies with status/response.
 func newTestServer(t *testing.T, status int, response string) (*httptest.Server, *recorder) {
 	t.Helper()
 	rec := &recorder{}

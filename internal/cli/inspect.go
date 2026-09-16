@@ -11,7 +11,6 @@ import (
 	"github.com/ryckakas/crashcause/internal/inspect"
 )
 
-// inspectOptions holds all flag-bound settings for the inspect command.
 type inspectOptions struct {
 	container       string
 	output          string
@@ -92,8 +91,6 @@ func runInspect(cmd *cobra.Command, args []string, opts *inspectOptions) error {
 	return exitCode(code)
 }
 
-// resolveNamespace applies the documented precedence: the -n/--namespace flag
-// wins, then the current kubeconfig context's namespace, then "default".
 func resolveNamespace(flags *genericclioptions.ConfigFlags) string {
 	if flags.Namespace != nil && *flags.Namespace != "" {
 		return *flags.Namespace

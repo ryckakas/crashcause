@@ -31,22 +31,16 @@ import (
 )
 
 const (
-	// defaultPreviousLogLines is the number of log lines tailed per container.
-	defaultPreviousLogLines int64 = 60
-	// defaultInitStuckThreshold is how long an init container may stay Running
-	// before it is considered stuck.
-	defaultInitStuckThreshold = 10 * time.Minute
+	defaultPreviousLogLines   int64 = 60
+	defaultInitStuckThreshold       = 10 * time.Minute
 )
 
 // ErrContainerNotFound is returned (wrapped) when the requested container
 // filter names a container that does not exist in the pod at all.
 var ErrContainerNotFound = errors.New("container not found in pod")
 
-// errNilPod is returned when ForPodObject is handed a nil pod.
 var errNilPod = errors.New("nil pod")
 
-// waitingReasonsWarrantingDiagnosis is the exact set of state.waiting reasons
-// that make a container worth diagnosing on their own.
 var waitingReasonsWarrantingDiagnosis = map[string]bool{
 	"CrashLoopBackOff":           true,
 	"ImagePullBackOff":           true,
@@ -126,7 +120,6 @@ func (c *Collector) LogFetchesSkipped() uint64 {
 	return c.logSkips.Load()
 }
 
-// now reads the injected clock.
 func (c *Collector) now() time.Time {
 	return c.opts.Now()
 }
@@ -195,8 +188,6 @@ func (c *Collector) ForPodObject(ctx context.Context, pod *corev1.Pod, container
 	return out, nil
 }
 
-// containerTargets walks all three container status lists and keeps the ones
-// that warrant diagnosis.
 func (c *Collector) containerTargets(pod *corev1.Pod, filter string, now time.Time) []target {
 	var out []target
 	add := func(statuses []corev1.ContainerStatus, kind engine.ContainerKind) {
@@ -217,8 +208,6 @@ func (c *Collector) containerTargets(pod *corev1.Pod, filter string, now time.Ti
 	return out
 }
 
-// warrantsDiagnosis reports whether a single container status is interesting
-// enough to hand to the engine.
 func (c *Collector) warrantsDiagnosis(st *corev1.ContainerStatus, kind engine.ContainerKind, now time.Time) bool {
 	if t := st.State.Terminated; t != nil && (t.ExitCode != 0 || st.RestartCount > 0) {
 		return true
@@ -237,8 +226,6 @@ func (c *Collector) warrantsDiagnosis(st *corev1.ContainerStatus, kind engine.Co
 	return false
 }
 
-// podLevelTarget builds the single synthetic entry used when no container
-// status warrants diagnosis but the pod as a whole is broken.
 func podLevelTarget(pod *corev1.Pod, filter string, events []engine.Event) (target, bool) {
 	evicted := pod.Status.Reason == "Evicted"
 	unschedulable := pod.Status.Phase == corev1.PodPending && hasFailedScheduling(events)
@@ -265,7 +252,6 @@ func podLevelTarget(pod *corev1.Pod, filter string, events []engine.Event) (targ
 	}, true
 }
 
-// hasFailedScheduling reports whether the pod has a FailedScheduling event.
 func hasFailedScheduling(events []engine.Event) bool {
 	for i := range events {
 		if events[i].Reason == "FailedScheduling" {
@@ -275,8 +261,6 @@ func hasFailedScheduling(events []engine.Event) bool {
 	return false
 }
 
-// podHasContainer reports whether name matches any container in the pod's spec
-// or status, in any of the three container roles.
 func podHasContainer(pod *corev1.Pod, name string) bool {
 	for i := range pod.Spec.Containers {
 		if pod.Spec.Containers[i].Name == name {
@@ -308,7 +292,6 @@ func podHasContainer(pod *corev1.Pod, name string) bool {
 	return false
 }
 
-// buildInputs projects one container of one pod into the engine's contract.
 func (c *Collector) buildInputs(
 	ctx context.Context,
 	pod *corev1.Pod,
@@ -386,7 +369,6 @@ func (c *Collector) buildInputs(
 	return in
 }
 
-// terminationState projects a container's terminated state.
 func terminationState(t *corev1.ContainerStateTerminated) engine.TerminationState {
 	if t == nil {
 		return engine.TerminationState{}
