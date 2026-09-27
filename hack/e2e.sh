@@ -229,11 +229,24 @@ check_cluster() {
 # Workload setup
 # ---------------------------------------------------------------------------
 
+default_serviceaccount_exists() {
+  kubectl get serviceaccount default -n "$NAMESPACE" >/dev/null 2>&1
+}
+
 apply_manifests() {
   info "applying demo manifests from examples/kind-demo/"
 
+  # A pod created while the node still carries its not-ready taint gets a
+  # FailedScheduling event that outlives the taint, and crashcause would then
+  # report the stuck-init scenario as unschedulable.
+  kubectl wait --for=condition=Ready nodes --all --timeout="${TIMEOUT}s"
+
   # The namespace has to exist before the workloads that name it.
   kubectl apply -f "${MANIFEST_DIR}/namespace.yaml"
+  # The API server rejects pods in a brand-new namespace until the
+  # service-account controller has created its "default" ServiceAccount,
+  # which happens asynchronously a moment after the namespace appears.
+  wait_until "the default ServiceAccount in ${NAMESPACE}" default_serviceaccount_exists
 
   # kind-config.yaml is a kind Cluster config, NOT a Kubernetes object:
   # applying the directory wholesale would fail on it. Enumerate instead.
