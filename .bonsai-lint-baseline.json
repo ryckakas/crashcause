@@ -35,13 +35,10 @@
       "TestHTUnknownRuleEvidenceBranches": 16
     },
     "internal/engine/rules.go": {
-      "appExitNonzeroRule": 38,
-      "configMissingRefRule": 33,
       "initContainerStuckRule": 24,
       "probeLivenessRule": 24,
       "probeStartupRule": 23,
       "sigkillUnattributedRule": 17,
-      "unknownRule": 34,
       "unschedulableRule": 17,
       "volumeMountFailureRule": 21
     },
