@@ -76,7 +76,7 @@ func specificRules() []Rule {
 
 // Classify runs all applicable rules. Returned slice is priority-ordered;
 // index 0 is the primary diagnosis. Empty slice means "nothing wrong /
-// normal lifecycle" (e.g. exit 143 during deletion) — callers must treat
+// normal lifecycle" (e.g. exit 143 during deletion); callers must treat
 // empty as no-finding, NOT as unknown.
 func Classify(in Inputs) []Diagnosis {
 	in = normalizeInputs(in)

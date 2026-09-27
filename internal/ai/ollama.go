@@ -4,8 +4,8 @@ import "context"
 
 // ollamaProvider talks to a local or in-cluster ollama server. It needs no
 // API key and, when pointed at localhost or an in-cluster service, no crash
-// data leaves the operator's machine or cluster — the recommended option for
-// privacy-sensitive environments (spec §6).
+// data leaves the operator's machine or cluster. It is the recommended option
+// for privacy-sensitive environments (spec §6).
 type ollamaProvider struct {
 	client *client
 }

@@ -31,7 +31,7 @@ func workloadKeyFor(namespace string, owner engine.Owner, podName string) worklo
 }
 
 // emissionKey is the spec §5.2 dedup key: (namespace, owner, container,
-// cause). restartCount is deliberately NOT part of it — including it would
+// cause). restartCount is deliberately NOT part of it: including it would
 // re-emit on every backoff cycle, which is the exact failure the workload-
 // keyed design replaced.
 type emissionKey struct {
@@ -42,7 +42,7 @@ type emissionKey struct {
 
 // causeKey tracks the last cause seen for one container of one workload, so
 // that a CHANGE of cause emits immediately even when the new cause's own key
-// was seen (and suppressed) earlier — e.g. an A→B→A flap inside one
+// was seen (and suppressed) earlier, e.g. an A→B→A flap inside one
 // reemit interval.
 type causeKey struct {
 	workload  workloadKey
@@ -100,7 +100,7 @@ func newDedupCache(now func() time.Time, ttl, reemit time.Duration) *dedupCache 
 // for this (workload, container), or when ReemitInterval has elapsed since the
 // key's last emission; otherwise it suppresses.
 //
-// It is called for EVERY observed crash — the Prometheus counter is
+// It is called for EVERY observed crash; the Prometheus counter is
 // incremented by the caller before this, never gated by it.
 func (c *dedupCache) observe(k emissionKey, owner engine.Owner) bool {
 	c.mu.Lock()

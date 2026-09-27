@@ -116,7 +116,7 @@ func TestControllerReemitsAfterInterval(t *testing.T) {
 
 // TestControllerTTLEvictionForgetsSeriesAndReemits covers the series lifecycle
 // (spec §7.2): a workload that goes quiet is eventually evicted from the dedup
-// cache, and its metric series is dropped with it — otherwise /metrics grows
+// cache, and its metric series is dropped with it; otherwise /metrics grows
 // forever. After eviction the same crash is news again.
 func TestControllerTTLEvictionForgetsSeriesAndReemits(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
@@ -155,7 +155,7 @@ func TestControllerTTLEvictionForgetsSeriesAndReemits(t *testing.T) {
 
 // TestControllerLifecycleNoiseIsSilent is decision log entry 7: a pod being
 // deleted whose container took SIGTERM (exit 143) is a normal rolling update.
-// It must produce no line AND no counter increment — the engine returns no
+// It must produce no line AND no counter increment: the engine returns no
 // diagnosis at all, so nothing downstream ever sees it.
 func TestControllerLifecycleNoiseIsSilent(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
@@ -199,7 +199,7 @@ func TestControllerForgetPodRetiresWorkload(t *testing.T) {
 
 // TestControllerForgetPodKeepsWorkloadWithTwin: a rollout deletes pods while
 // their replacements are already running. The workload is still alive, so its
-// series and dedup state must survive — otherwise every rollout would reset
+// series and dedup state must survive; otherwise every rollout would reset
 // dedup and re-emit.
 func TestControllerForgetPodKeepsWorkloadWithTwin(t *testing.T) {
 	clk := newFakeClock(testBaseTime)
@@ -259,7 +259,7 @@ func TestControllerObserveSkipsUnchangedFingerprint(t *testing.T) {
 
 // TestControllerObserveReenqueuesStaticallyBrokenPod: a pod whose broken state
 // never changes (constant fingerprint) must still be re-enqueued once per
-// ReemitInterval — otherwise nothing ever refreshes its dedup entry and the
+// ReemitInterval; otherwise nothing ever refreshes its dedup entry and the
 // TTL sweep drops its metric series while the pod is still broken.
 func TestControllerObserveReenqueuesStaticallyBrokenPod(t *testing.T) {
 	clk := newFakeClock(testBaseTime)

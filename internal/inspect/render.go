@@ -34,7 +34,7 @@ func newDiagnosis(d engine.Diagnosis) Diagnosis {
 }
 
 // Indentation used by the human renderer. Deliberately plain: no ANSI color,
-// no box drawing, no external color library — the report is meant to survive
+// no box drawing, no external color library. The report is meant to survive
 // being piped into a ticket, a chat message or a CI log unchanged, and NO_COLOR
 // handling you never need is one less thing to get wrong.
 const (
@@ -61,7 +61,7 @@ func renderContainer(bw *errWriter, res containerResult, verbose bool) {
 		return
 	}
 
-	bw.linef("%s/%s container %s — %s (%s confidence)", d.Namespace, d.Pod, d.Container, d.Cause, d.Confidence)
+	bw.linef("%s/%s container %s: %s (%s confidence)", d.Namespace, d.Pod, d.Container, d.Cause, d.Confidence)
 
 	if d.Explanation != "" {
 		bw.line("")
@@ -93,14 +93,14 @@ func renderContainer(bw *errWriter, res containerResult, verbose bool) {
 	if verbose && len(res.diagnoses) > 1 {
 		bw.line("")
 		for _, sec := range res.diagnoses[1:] {
-			bw.linef("%salso matched: %s (%s) — %s", bodyIndent, sec.Cause, sec.Confidence, oneLine(sec.Explanation))
+			bw.linef("%salso matched: %s (%s): %s", bodyIndent, sec.Cause, sec.Confidence, oneLine(sec.Explanation))
 		}
 	}
 }
 
 // renderJSON writes the machine-readable report. Which diagnoses are included
 // follows the human renderer exactly: the primary per container by default, and
-// every match under --verbose — so a script and a human running the same
+// every match under --verbose, so a script and a human running the same
 // command never see different findings.
 func renderJSON(w io.Writer, namespace, pod string, results []containerResult, verbose bool) error {
 	report := Report{

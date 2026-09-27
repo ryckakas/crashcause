@@ -4,7 +4,7 @@
 # --config ...`), not a Kubernetes API resource. It must never be passed to
 # `kubectl apply`. `kubectl apply -f examples/kind-demo/` would try to parse
 # this file as a Kubernetes object and fail (or, worse, if a CRD ever matched
-# this GVK, do something unintended) — always target the workload manifests
+# this GVK, do something unintended). Always target the workload manifests
 # explicitly, never the whole directory.
 #
 # Single control-plane node only, no worker node: kind's default single-node

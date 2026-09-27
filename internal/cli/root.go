@@ -1,6 +1,6 @@
 // Package cli implements the crashcause command-line interface: the root
 // command plus the inspect and watch subcommands. This package wires up
-// flags and logging only — the actual pod inspection and cluster-watch
+// flags and logging only; the actual pod inspection and cluster-watch
 // logic is implemented in later milestones.
 package cli
 

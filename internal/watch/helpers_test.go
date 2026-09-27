@@ -19,7 +19,7 @@ import (
 	"github.com/ryckakas/crashcause/internal/engine"
 )
 
-// IMPORTANT — what these tests do and do not depend on.
+// IMPORTANT: what these tests do and do not depend on.
 //
 // The controller is driven SYNCHRONOUSLY through processPod wherever possible:
 // dedup, metric lifecycle and lifecycle-noise suppression are pure functions of

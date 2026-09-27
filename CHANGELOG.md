@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The `inspect` human report now uses a colon instead of an em dash between
+  the container and its cause in the header line, and before the explanation
+  in `--verbose` "also matched" lines, so anything parsing them needs updating.
+
 ### Fixed
 
 - A pod that was briefly unschedulable (for example while a node was still
@@ -21,9 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - New cause code `security_context_violation` (the 18th): a
-  `CreateContainerConfigError` caused by a securityContext rejection —
-  `runAsNonRoot: true` against an image that runs as root, an image with a
-  non-numeric user, or an explicit `runAsUser: 0` — is now reported as its own
+  `CreateContainerConfigError` caused by a securityContext rejection
+  (`runAsNonRoot: true` against an image that runs as root, an image with a
+  non-numeric user, or an explicit `runAsUser: 0`) is now reported as its own
   high-confidence cause instead of being folded into
   `config_missing_reference` (#17).
 - `inspect` against an unreachable cluster (expired or stale credentials, a
@@ -36,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A pod in `CreateContainerConfigError` whose Failed event message merely
   contained the word "image" ("container has runAsNonRoot and image will run
-  as root") was misclassified as `image_pull_other` — a verdict refuted by the
+  as root") was misclassified as `image_pull_other`, a verdict refuted by the
   successful `Pulled` event in the same event list. The `image_pull_*` rules
   now stand down whenever the container's waiting reason names a non-pull
   failure family; `SignatureValidationFailed` was added to the pull-reason set
@@ -60,8 +66,8 @@ First public release.
 - Two log-tail patterns: `dns resolution failure` (Python `gaierror`, glibc
   `Name or service not known`, Go `no such host`, Node `EAI_NONAME`, libpq
   `could not translate host name`) and `python traceback`. A Python service
-  failing to resolve its database — one of the most common shapes of failure
-  in a cluster — previously produced "no known crash pattern matched".
+  failing to resolve its database (one of the most common shapes of failure
+  in a cluster) previously produced "no known crash pattern matched".
 - `--ai-timeout` flag (and `ai.timeout` in the chart) bounding each summary,
   plus `ai.NewSummarizerWithTimeout`. The 15s default suits a hosted API but
   is routinely too short for a self-hosted ollama, where the first call also
@@ -86,10 +92,10 @@ First public release.
 - Chart secret handling: `ai.existingSecret`/`ai.secretKey` mounted into
   `CRASHCAUSE_AI_API_KEY` and `loki.existingSecret` injected as env; the
   chart never creates a Secret and never accepts a plaintext key.
-- `examples/grafana-dashboard.json` — importable dashboard (crash causes over
+- `examples/grafana-dashboard.json`: importable dashboard (crash causes over
   time, top crashing workloads, per-cause stats, log-fetch rate-limit
   saturation) with datasource/namespace/cause template variables.
-- `examples/prometheus-alerts.yaml` — plain Prometheus rules file (also
+- `examples/prometheus-alerts.yaml`: plain Prometheus rules file (also
   usable as a `PrometheusRule` body) covering OOM kills, sustained
   crashlooping, image-pull auth failures, and log-fetch rate-limit
   saturation.
@@ -100,7 +106,7 @@ First public release.
   manifest in `examples/kind-demo/`, creates an additional healthy control
   pod, bounded-polls each pod for its expected diagnosable state, and runs
   `crashcause inspect --output json` against each one, asserting both the
-  expected cause code and exit code — including the healthy-control case,
+  expected cause code and exit code, including the healthy-control case,
   where `diagnoses` must be empty and the exit code must be `2`. Both
   `make e2e` and the CI `e2e-kind` job drive this script; it remains
   best-effort (non-gating, `continue-on-error: true`) rather than a merge
@@ -152,7 +158,7 @@ First public release.
   `initialDelaySeconds` into the returned budget, so `probe_startup_failure`
   printed `failureThreshold=2 x periodSeconds=5 = 15s` (that is 10s), and
   `probe_liveness_failure` called the initial delay part of the time spent
-  "of failing probes" — no probe runs during it. The helper now returns the
+  "of failing probes"; no probe runs during it. The helper now returns the
   probing window and the total separately.
 - Log-hint evidence quoted the wrong line: `findLine` scanned lines before
   needles, so a Python DNS failure was evidenced by the intermediate stack

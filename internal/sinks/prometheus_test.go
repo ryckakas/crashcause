@@ -200,13 +200,13 @@ func TestPrometheusForgetSeries(t *testing.T) {
 
 // TestPrometheusForgetSeriesNormalization checks that ForgetSeries applies
 // the SAME owner normalization as IncCrash, so a caller that hands back the
-// Owner it incremented with always removes the series it created — even
+// Owner it incremented with always removes the series it created, even
 // though that series is keyed by normalized labels the caller never sees.
 //
 // Note the deliberate limitation: normalization is only self-consistent, not
 // convergent across owner shapes. A Job carrying CronJobName is folded to
 // owner_kind="CronJob", while the same Job WITHOUT CronJobName is truncated
-// to owner_kind="Job" — different label sets, so forgetting by one does not
+// to owner_kind="Job": different label sets, so forgetting by one does not
 // remove the other. Watch mode must therefore forget with the same Owner it
 // incremented with (which it has: the dedup-cache key holds it).
 func TestPrometheusForgetSeriesNormalization(t *testing.T) {
@@ -246,7 +246,7 @@ func TestPrometheusForgetSeriesNormalization(t *testing.T) {
 		}
 
 		// A later run of the same pipeline has a different pod-level name but
-		// normalizes to the same series, so forgetting with it works too —
+		// normalizes to the same series, so forgetting with it works too;
 		// that is the point of the truncation heuristic.
 		p.ForgetSeries("ns1", engine.Owner{Kind: "Job", Name: "ci-run-b3m9q"})
 

@@ -516,7 +516,7 @@ func (c *Controller) forgetPod(pod *corev1.Pod) {
 }
 
 // forgetSeriesUnlessShared retires a workload's metric series unless another
-// live workload still maps to the same normalized series — normalizeOwner
+// live workload still maps to the same normalized series: normalizeOwner
 // folds every run Job of one CronJob into a single series, so forgetting one
 // finished run must not wipe the counter the other runs still increment.
 func (c *Controller) forgetSeriesUnlessShared(namespace string, owner engine.Owner) {

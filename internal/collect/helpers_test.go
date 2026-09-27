@@ -13,14 +13,14 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-// IMPORTANT — how the fake clientset handles pod logs.
+// IMPORTANT: how the fake clientset handles pod logs.
 //
 // FakePods.GetLogs records an action (verb "get", resource "pods", subresource
 // "log") at CALL time and always streams the literal body "fake logs"; the
 // content is a constant of the fake, not of anything under test. These tests
-// therefore assert log PLUMBING only — whether a log action was recorded at
+// therefore assert log PLUMBING only: whether a log action was recorded at
 // all, and the *corev1.PodLogOptions it carried (Previous, TailLines,
-// Container) — and never assert on log CONTENT.
+// Container). They never assert on log CONTENT.
 //
 // The fake also ignores field selectors on List. Event fixtures live in the
 // same namespace as the pod and the tests rely on the collector's client-side
@@ -161,7 +161,7 @@ func podEvent(name, evType, reason, message string, count int32, last time.Time)
 }
 
 // otherPodEvent is an event in the SAME namespace for a DIFFERENT pod. It must
-// never appear in collected events — the fake ignores field selectors, so this
+// never appear in collected events; the fake ignores field selectors, so this
 // only gets filtered out by the collector's own client-side filter.
 func otherPodEvent() *corev1.Event {
 	return &corev1.Event{

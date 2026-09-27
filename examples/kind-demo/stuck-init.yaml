@@ -2,7 +2,7 @@
 #
 # Mechanism: the (only) init container just sleeps for a long time and
 # never exits 0, so the pod stays in phase Pending with status
-# `Init:0/1` indefinitely — it is not crashing or restarting, it is simply
+# `Init:0/1` indefinitely: it is not crashing or restarting, it is simply
 # stuck, which is what distinguishes this from init_container_failure. The
 # main container is trivial (`sleep 3600`) and would run fine if the init
 # container ever completed, so the only interesting thing about this pod is

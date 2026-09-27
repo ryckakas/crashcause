@@ -6,7 +6,7 @@ a Kubernetes cluster and reports the cause.
 This chart deploys exactly one thing: `crashcause watch`, a long-running
 controller that watches pods and events across the cluster, classifies each
 crash (bad exit code, OOM, failed probe, image pull failure, eviction,
-unschedulable, ...), and emits the diagnosis to whichever sinks you enable —
+unschedulable, ...), and emits the diagnosis to whichever sinks you enable:
 stdout JSON (always on, one object per line), Prometheus metrics, and/or
 Loki. It deploys **nothing** for `crashcause inspect`: `inspect` is a
 `kubectl` plugin that runs on your workstation with your own kubeconfig
@@ -93,7 +93,7 @@ helm template crashcause ./charts/crashcause \
 ```
 
 Note: even in this example the `ClusterRole` for `pods`, `events`, and
-`nodes` is still cluster-scoped — see [Known limitations](#known-limitations-pre-10)
+`nodes` is still cluster-scoped; see [Known limitations](#known-limitations-pre-10)
 for why `watch.namespaces` narrows what is *watched*, not what RBAC grants.
 
 ## Values
@@ -120,7 +120,7 @@ for why `watch.namespaces` narrows what is *watched*, not what RBAC grants.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `watch.namespaces` | list | `[]` | Namespaces the controller watches; empty means all namespaces. Does not change what RBAC grants — see [Known limitations](#known-limitations-pre-10). |
+| `watch.namespaces` | list | `[]` | Namespaces the controller watches; empty means all namespaces. Does not change what RBAC grants; see [Known limitations](#known-limitations-pre-10). |
 | `watch.selector` | string | `""` | Label selector further limiting which pods are watched, e.g. `tier!=batch`. |
 | `watch.reemitInterval` | duration | `1h` | Minimum time before an unchanged diagnosis for the same dedup key is logged again; the Prometheus counter still increments on every observed crash regardless. |
 | `watch.dedupTTL` | duration | `6h` | How long a dedup key is remembered, bounding controller memory and driving metric series cleanup. |
@@ -154,7 +154,7 @@ The `ServiceMonitor` template only renders when `serviceMonitor.enabled=true`
 CRD is detected in the target cluster or `skipCapabilityCheck=true`. If
 `serviceMonitor.enabled=true` but neither condition is met, the template
 calls Helm's `fail` with an explanatory message instead of silently rendering
-nothing — worth knowing because `helm template` never has a cluster
+nothing, which is worth knowing because `helm template` never has a cluster
 connection, so its capability check always fails and `skipCapabilityCheck`
 must be set to render offline.
 
@@ -162,7 +162,7 @@ must be set to render offline.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `loki.url` | string | `""` | Loki push URL, e.g. `http://loki:3100/loki/api/v1/push`; a base URL (`http://loki:3100`) also works — the `/loki/api/v1/push` path is appended automatically when not already present. Empty disables the Loki sink. |
+| `loki.url` | string | `""` | Loki push URL, e.g. `http://loki:3100/loki/api/v1/push`; a base URL (`http://loki:3100`) also works; the `/loki/api/v1/push` path is appended automatically when not already present. Empty disables the Loki sink. |
 | `loki.existingSecret` | string | `""` | Name of an existing Secret whose keys are injected verbatim as env vars; see [Secrets](#secrets) for the required key names. |
 
 ### ai
@@ -209,8 +209,8 @@ must be set to render offline.
 
 The Deployment's `args` are built entirely by the `crashcause.args` template
 helper (`templates/_helpers.tpl`). Every flag whose value comes from
-`values.yaml` is passed explicitly — nothing is left to rely on the binary's
-own defaults — so `kubectl describe pod` shows exactly the configuration the
+`values.yaml` is passed explicitly (nothing is left to rely on the binary's
+own defaults), so `kubectl describe pod` shows exactly the configuration the
 chart was rendered with. `--collect-logs` in particular is **always** passed
 explicitly, in both the `true` and `false` case, precisely so the
 log-collection state is readable off the Deployment without cross-referencing
@@ -250,15 +250,15 @@ hatch for anything this chart does not model.
 The chart grants a single cluster-scoped `ClusterRole` (plus an optional
 namespaced `Role` for leader election). No rule in it contains a write verb,
 none of it touches Secrets or ConfigMaps, and the only rule that can see
-workload *contents* rather than metadata — the pod-log read — can be removed
+workload *contents* rather than metadata (the pod-log read) can be removed
 from the RBAC object itself, not merely switched off in configuration.
 
 | Permission | Why it is needed | How to remove it | What breaks / degrades |
 |---|---|---|---|
-| `pods` get/list/watch | Container statuses, `lastState.terminated` (exit code, reason, signal), restart counts, QoS class, resource requests/limits — the primary evidence source for every diagnosis. | Cannot be removed. This is the tool. | Nothing to remove without disabling the controller entirely. |
+| `pods` get/list/watch | Container statuses, `lastState.terminated` (exit code, reason, signal), restart counts, QoS class, resource requests/limits: the primary evidence source for every diagnosis. | Cannot be removed. This is the tool. | Nothing to remove without disabling the controller entirely. |
 | `events` get/list/watch | `Killing`, `Unhealthy`, `BackOff`, `Failed`, `FailedScheduling`, `Evicted`, `FailedMount`, and similar event reasons. | Not exposed as a chart toggle; would require editing `templates/rbac.yaml` directly. | Every events-only cause is lost: `unschedulable`, `volume_mount_failure`, `probe_liveness_failure`, `probe_startup_failure`, `image_pull_*`. |
-| `nodes` get/list/watch | `MemoryPressure` / `DiskPressure` conditions on the crashed pod's node — read-only metadata on the Node object, not access to the node itself. | Not exposed as a chart toggle; would require editing `templates/rbac.yaml` directly. | Only weakens evidence attached to `evicted` and `sigkill_unattributed`; nothing stops working. |
-| `pods/log` get (previous-container log tail) | Log tail capped at `watch.previousLines`, rate-limited to `logCollection.rateLimitPerMinute` fetches/minute — the log-pattern evidence source. | `--set logCollection.enabled=false`. This removes the rule from the `ClusterRole` entirely, not just the flag. | `app_exit_nonzero` still fires from exit codes and events, just without log-pattern hints. The AI layer becomes inert: there is nothing left to send it. |
+| `nodes` get/list/watch | `MemoryPressure` / `DiskPressure` conditions on the crashed pod's node: read-only metadata on the Node object, not access to the node itself. | Not exposed as a chart toggle; would require editing `templates/rbac.yaml` directly. | Only weakens evidence attached to `evicted` and `sigkill_unattributed`; nothing stops working. |
+| `pods/log` get (previous-container log tail) | Log tail capped at `watch.previousLines`, rate-limited to `logCollection.rateLimitPerMinute` fetches/minute: the log-pattern evidence source. | `--set logCollection.enabled=false`. This removes the rule from the `ClusterRole` entirely, not just the flag. | `app_exit_nonzero` still fires from exit codes and events, just without log-pattern hints. The AI layer becomes inert: there is nothing left to send it. |
 | `coordination.k8s.io` leases create/get/update | Leader election, so multiple replicas do not each independently emit every crash. | Default; only granted at all when `leaderElection.enabled=true`. Leave it at `false` (the default) to grant nothing. | With it absent, `replicas` must stay at `1` (see [Scaling / HA](#scaling--ha)). |
 
 Verify what is actually granted directly against the rendered manifests or a
@@ -273,13 +273,13 @@ kubectl get clusterrole crashcause -o yaml
 ```
 
 **Rate limiting.** `logCollection.rateLimitPerMinute` (default `10`) caps
-pod-log fetches client-side. Fetches over budget are skipped — not queued —
+pod-log fetches client-side. Fetches over budget are skipped (not queued)
 and counted in the `crashcause_log_fetches_skipped_total` metric; the
 diagnosis for that crash still proceeds, just without log evidence.
 
 **Pod security context.** The container runs as a non-root, fixed UID/GID
-(`65532`), with a read-only root filesystem — the only writable path is an
-`emptyDir` mounted at `/tmp` — all Linux capabilities dropped, and the
+(`65532`), with a read-only root filesystem (the only writable path is an
+`emptyDir` mounted at `/tmp`), all Linux capabilities dropped, and the
 `RuntimeDefault` seccomp profile applied. See the
 [runtime / scheduling / security](#runtime--scheduling--security) values
 table for the exact settings.
@@ -298,7 +298,7 @@ a Secret you create and manage yourself.
 
 ### AI provider API key
 
-Only mounted when both `ai.enabled=true` and `ai.existingSecret` is set — and
+Only mounted when both `ai.enabled=true` and `ai.existingSecret` is set, and
 not needed at all for `ai.provider=ollama`. The key is injected into the
 `CRASHCAUSE_AI_API_KEY` environment variable, never passed as a flag (process
 listings leak flags) and never logged.
@@ -335,7 +335,7 @@ loki:
   existingSecret: crashcause-loki
 ```
 
-A base URL (`http://loki:3100`) works too — the `/loki/api/v1/push` path is
+A base URL (`http://loki:3100`) works too; the `/loki/api/v1/push` path is
 appended automatically when not already present.
 
 ## AI notes
@@ -362,7 +362,7 @@ One replica is the normal, and only fully correct, configuration.
 - `replicas > 1` **requires** `leaderElection.enabled=true`. Without leader
   election every replica runs its own informers and its own in-memory dedup
   cache, so N replicas means N independent observations and N independent
-  emissions of every crash — duplicate log lines and inflated Prometheus
+  emissions of every crash: duplicate log lines and inflated Prometheus
   counters, not more throughput.
 - With `leaderElection.enabled=true`, extra replicas sit idle as hot
   standbys; only the elected leader is active. They exist for availability
@@ -373,7 +373,7 @@ One replica is the normal, and only fully correct, configuration.
   few seconds of downtime cost nothing.
 - The Deployment injects `POD_NAMESPACE` via the downward API, and the
   controller's `--leader-election-namespace` defaults to `$POD_NAMESPACE`, so
-  the Lease is always created in the release namespace — which is exactly why
+  the Lease is always created in the release namespace, which is exactly why
   the leader-election grant in RBAC is a namespaced `Role` rather than another
   cluster-wide rule.
 
@@ -382,10 +382,10 @@ One replica is the normal, and only fully correct, configuration.
 Two Prometheus metrics are exposed on `metrics.addr` (default `:9090`) when
 `metrics.enabled=true`:
 
-- `crashcause_diagnoses_total{namespace, owner_kind, owner_name, cause}` —
+- `crashcause_diagnoses_total{namespace, owner_kind, owner_name, cause}`:
   counter, incremented on every observed crash regardless of re-emit
   deduplication.
-- `crashcause_log_fetches_skipped_total` — counter of pod-log fetches
+- `crashcause_log_fetches_skipped_total`: counter of pod-log fetches
   skipped because `logCollection.rateLimitPerMinute` was exceeded.
 
 Check the endpoint directly:
@@ -418,7 +418,7 @@ chart:
 - **The chart version tracks the crashcause release.** The release workflow
   stamps both the chart version and `appVersion` from the git tag at package
   time, so a chart-only fix is still published by cutting a new crashcause
-  tag — there is no independent chart versioning.
+  tag; there is no independent chart versioning.
 
 ## Uninstall
 

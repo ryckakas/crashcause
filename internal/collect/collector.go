@@ -8,7 +8,7 @@
 //
 // Collection is deliberately forgiving: only failing to read the pod itself
 // (or naming a container that does not exist) is an error. Events, logs and
-// node conditions are best-effort — when they are unavailable the collector
+// node conditions are best-effort: when they are unavailable the collector
 // degrades and the engine simply sees less evidence.
 package collect
 
@@ -159,7 +159,7 @@ func (c *Collector) ForPodObject(ctx context.Context, pod *corev1.Pod, container
 	targets := c.containerTargets(pod, containerFilter, now)
 
 	// Cheap pre-check: a healthy, non-Pending pod with no status reason costs
-	// exactly one API call (the pod GET) — no events, no logs, no node.
+	// exactly one API call (the pod GET). No events, no logs, no node.
 	if len(targets) == 0 && pod.Status.Phase != corev1.PodPending && pod.Status.Reason == "" {
 		return nil, nil
 	}
@@ -247,7 +247,7 @@ func podLevelTarget(pod *corev1.Pod, filter string, events []engine.Event) (targ
 		name: name,
 		kind: engine.KindApp,
 		// A Pending pod's container never started, so there are no logs to
-		// read — asking for them would be a guaranteed-404 API call.
+		// read; asking for them would be a guaranteed-404 API call.
 		skipLogs: pod.Status.Phase == corev1.PodPending,
 	}, true
 }

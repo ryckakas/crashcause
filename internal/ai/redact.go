@@ -18,7 +18,7 @@ const (
 // that a connection string keeps its host and port (they are diagnosis, not
 // secret) instead of being flattened to [REDACTED] by the generic rule.
 var (
-	// scheme://user:pass@host:port/... — only the userinfo is consumed, so
+	// In scheme://user:pass@host:port/... only the userinfo is consumed, so
 	// everything from the host onwards survives untouched.
 	urlCredentialsRe = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s/@:]+:[^\s/@]*@`)
 
@@ -43,7 +43,7 @@ var (
 
 	jwtRe = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*`)
 
-	// Bare IPv4 addresses — opt-in only. Any :port is left alone because the
+	// Bare IPv4 addresses (opt-in only). Any :port is left alone because the
 	// port is part of the diagnosis ("connection refused to ...:5432").
 	ipv4Re = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\b`)
 
@@ -119,7 +119,7 @@ func NewRedactor(opts RedactorOptions) (*Redactor, error) {
 //  8. bare IPv4 addresses (only when RedactIPs is set)
 //
 // Stack traces, file paths, hostnames, exception names, exit codes and port
-// numbers are intentionally left untouched — destroying them would destroy
+// numbers are intentionally left untouched: destroying them would destroy
 // the diagnosis the summary is supposed to explain.
 func (r *Redactor) Redact(s string) string {
 	if s == "" {
@@ -161,10 +161,10 @@ func (r *Redactor) RedactLines(lines []string) []string {
 // printed by the CLI: auditability over assurance (spec §6 / decision 6).
 func (r *Redactor) Patterns() []string {
 	patterns := []string{
-		"credentials in URLs: `scheme://user:pass@host:port/path` becomes `scheme://***@host:port/path` — the host and port are KEPT, they are diagnosis, not secret",
+		"credentials in URLs: `scheme://user:pass@host:port/path` becomes `scheme://***@host:port/path`; the host and port are KEPT, they are diagnosis, not secret",
 		"Authorization headers (case-insensitive, including Proxy-/WWW- prefixed forms): the credential after `Authorization:` or `Authorization=` is replaced with " + redactedPlaceholder + "; the header name and the auth scheme (Bearer/Basic/Digest/Token) are kept",
 		"AWS secret access keys: a 40-character base64-ish value assigned to an `aws_secret_access_key`-style key name (only in that position, so random hashes and image digests survive)",
-		"key=value and key: value pairs whose key ends with api_key/apikey/password/passwd/pwd/secret/access_key/token/auth (case-insensitive, any prefix such as DB_ or x-): the value — a quoted string or a run of non-whitespace — is replaced with " + redactedPlaceholder + "; values that are themselves URLs are left to the URL rule above so the host and port survive",
+		"key=value and key: value pairs whose key ends with api_key/apikey/password/passwd/pwd/secret/access_key/token/auth (case-insensitive, any prefix such as DB_ or x-): the value (a quoted string or a run of non-whitespace) is replaced with " + redactedPlaceholder + "; values that are themselves URLs are left to the URL rule above so the host and port survive",
 		"AWS access key IDs: `AKIA` followed by 16 uppercase alphanumerics",
 		"JWT-shaped strings: `eyJ<base64url>.<base64url>.<base64url>`",
 	}
@@ -176,7 +176,7 @@ func (r *Redactor) Patterns() []string {
 	if r != nil && r.redactIPs {
 		patterns = append(patterns, "bare IPv4 addresses are replaced with "+redactedIPPlaceholder+" (--ai-redact-ips is on); any `:port` still survives")
 	} else {
-		patterns = append(patterns, "bare IPv4 addresses are NOT redacted by default — \"connection refused to 10.2.3.4:5432\" is often the diagnosis itself; opt in with --ai-redact-ips")
+		patterns = append(patterns, "bare IPv4 addresses are NOT redacted by default: \"connection refused to 10.2.3.4:5432\" is often the diagnosis itself; opt in with --ai-redact-ips")
 	}
 	return patterns
 }

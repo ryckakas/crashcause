@@ -17,7 +17,7 @@ import (
 // collection: on a persistent API error the pod is simply diagnosed without
 // event evidence.
 //
-// Every event for the pod is kept — deliberately no reason whitelist. A
+// Every event for the pod is kept: deliberately no reason whitelist. A
 // whitelist would silently drop reasons that future rules (or the AI layer)
 // need, and the engine already ignores events it does not care about.
 func (c *Collector) collectEvents(ctx context.Context, pod *corev1.Pod) []engine.Event {

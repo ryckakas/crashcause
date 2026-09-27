@@ -4,11 +4,11 @@
 # cluster (or realistically any single node anywhere) can offer. The
 # scheduler can never find a fit, so the pod stays Pending forever and the
 # scheduler emits a `FailedScheduling` Warning event citing "Insufficient
-# cpu". No limit is set (a limit isn't needed here — the scheduler only
+# cpu". No limit is set (a limit isn't needed here: the scheduler only
 # consults requests when filtering nodes).
 #
 # Note: because this pod never starts, no container ever runs, so there is
-# no waiting/terminated state and no logs at all — this is the one scenario
+# no waiting/terminated state and no logs at all; this is the one scenario
 # that exercises crashcause's events-only diagnosis path.
 apiVersion: v1
 kind: Pod

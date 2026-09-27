@@ -10,6 +10,10 @@
 
 SHELL := /bin/bash
 
+# go.mod's toolchain line is only a minimum; run CI's exact version instead.
+GOTOOLCHAIN ?= $(shell sed -n 's/^toolchain //p' go.mod)
+export GOTOOLCHAIN
+
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)

@@ -36,8 +36,8 @@ const (
 	// container, API error, bad options).
 	ExitError = 1
 	// ExitNothingToDiagnose means the run succeeded but the pod is not
-	// crashing — deliberately distinct from both success and failure so that
-	// scripts can tell "healthy" from "broken tooling".
+	// crashing. It is deliberately distinct from both success and failure so
+	// that scripts can tell "healthy" from "broken tooling".
 	ExitNothingToDiagnose = 2
 )
 
@@ -242,7 +242,7 @@ func checkedSummary(inputs []engine.Inputs) string {
 	for _, in := range inputs {
 		names = append(names, fmt.Sprintf("%s (%s)", in.Container, in.Kind))
 	}
-	return "checked: " + strings.Join(names, ", ") + " — no rule matched"
+	return "checked: " + strings.Join(names, ", ") + "; no rule matched"
 }
 
 // aiCauses is the exact set of primary causes the AI layer is allowed to

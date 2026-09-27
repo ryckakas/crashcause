@@ -8,7 +8,7 @@ const systemPrompt = "You are a Kubernetes crash analyst. Given a crash cause cl
 	"evidence, and the final log lines of the crashed container, explain the application-level " +
 	"root cause in 2-4 sentences. Be concrete about what the logs show. No preamble."
 
-// CONTRACT: req is expected to be ALREADY REDACTED — Summarizer.Summarize
+// CONTRACT: req is expected to be ALREADY REDACTED. Summarizer.Summarize
 // applies the Redactor before it reaches a provider. Nothing in this file
 // redacts anything; a caller that talks to a Provider directly is responsible
 // for redacting first.

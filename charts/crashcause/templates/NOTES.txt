@@ -1,8 +1,8 @@
 crashcause {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
-Watch the diagnosis stream (stdout JSON, one object per line — this is the
+Watch the diagnosis stream (stdout JSON, one object per line). This is the
 default sink and needs no configuration; anything already scraping container
-stdout picks it up):
+stdout picks it up:
 
   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -f
 
@@ -29,7 +29,7 @@ Log collection
 
     kubectl get clusterrole {{ include "crashcause.fullname" . }} -o yaml
 {{- else }}
-  DISABLED. The log-read rule was removed from the ClusterRole — the
+  DISABLED. The log-read rule was removed from the ClusterRole; the
   controller cannot read container log contents at all. Classification still
   works from exit codes, container statuses and events; only log-pattern
   hints are lost, and the AI layer has nothing to send.
