@@ -434,7 +434,7 @@ Prerequisites to build: **Go 1.25** (pinned as `toolchain go1.25.0` in
 `go.mod`; any Go ≥ 1.21 auto-downloads it).
 
 Prerequisites for the full check loop (not required just to build): **golangci-lint v2**,
-**helm**, **kind**.
+**shellcheck**, **helm**, **kind**.
 
 ```sh
 make fmt lint test race cover build e2e helm-lint check
