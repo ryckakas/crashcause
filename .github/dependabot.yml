@@ -7,6 +7,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Let a new release age a week before it is proposed, so a compromised or
+    # yanked version is usually caught upstream first. Security updates are
+    # not subject to cooldown.
+    cooldown:
+      default-days: 7
     groups:
       # k8s.io modules must move in lockstep (client-go/api/apimachinery/
       # cli-runtime share a version train); one grouped PR keeps them
@@ -30,3 +35,5 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7

@@ -6,7 +6,7 @@ Answers "why did this pod crash?" from live cluster state — no copy-pasting `d
 or `logs` output anywhere.
 
 [![CI](https://github.com/ryckakas/crashcause/actions/workflows/ci.yml/badge.svg)](https://github.com/ryckakas/crashcause/actions/workflows/ci.yml)
-![Go 1.25+](https://img.shields.io/badge/go-1.25%2B-00ADD8)
+![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 > **Status: pre-1.0.** CLI flags and chart values may still change between minor
@@ -130,7 +130,7 @@ attached to every release at
 if you would rather drop the binary on your `PATH` yourself — name it `kubectl-crashcause`
 to get the `kubectl crashcause` subcommand form without krew.
 
-Or build/install from source with Go 1.25+ (any Go ≥ 1.21 also works — the
+Or build/install from source with Go 1.26+ (any Go ≥ 1.21 also works — the
 `go` command auto-downloads the toolchain pinned in `go.mod`):
 
 ```sh
@@ -430,11 +430,11 @@ Deliberately out of scope for the first release:
 
 ## Development
 
-Prerequisites to build: **Go 1.25** (pinned as `toolchain go1.25.0` in
+Prerequisites to build: **Go 1.26** (pinned as `toolchain go1.26.8` in
 `go.mod`; any Go ≥ 1.21 auto-downloads it).
 
 Prerequisites for the full check loop (not required just to build): **golangci-lint v2**,
-**shellcheck**, **helm**, **kind**.
+**shellcheck**, **zizmor**, **helm**, **kind**.
 
 ```sh
 make fmt lint test race cover build e2e helm-lint check

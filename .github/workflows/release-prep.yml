@@ -43,8 +43,8 @@ jobs:
       # its tag-already-exists check. The RELEASE_PAT is wired into the
       # checkout so the branch push below carries its identity, not the
       # default token's.
-      - uses: actions/checkout@v7.0.1
-        with:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: # zizmor: ignore[artipacked] the branch push below authenticates with this persisted RELEASE_PAT, and no artifact is uploaded
           ref: main
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PAT }}
