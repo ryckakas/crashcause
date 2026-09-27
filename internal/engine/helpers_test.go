@@ -277,10 +277,7 @@ func TestHTTruncateMessage(t *testing.T) {
 		}
 	})
 	t.Run("over 300 chars is truncated with ellipsis", func(t *testing.T) {
-		long := ""
-		for i := 0; i < 320; i++ {
-			long += "a"
-		}
+		long := strings.Repeat("a", 320)
 		got := truncateMessage(long)
 		if len(got) != maxMessageLen+3 {
 			t.Fatalf("truncateMessage() length = %d, want %d", len(got), maxMessageLen+3)

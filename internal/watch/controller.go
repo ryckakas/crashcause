@@ -233,7 +233,7 @@ func (c *Controller) runWork(ctx context.Context) error {
 		f.WaitForCacheSync(ctx.Done())
 	}
 	if ctx.Err() != nil {
-		return nil //nolint:nilerr // canceled before we ever became ready: a clean stop
+		return nil // canceled before we ever became ready: a clean stop
 	}
 
 	c.ready.Store(true)
@@ -245,7 +245,7 @@ func (c *Controller) runWork(ctx context.Context) error {
 	)
 
 	var wg sync.WaitGroup
-	for i := 0; i < workerCount; i++ {
+	for range workerCount {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
