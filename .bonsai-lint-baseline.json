@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "entries": {
+    "internal/ai/provider_test.go": {
+      "TestNewAppliesDefaults": 20,
+      "TestProviderNonSuccessStatusNeverLeaksKey": 28
+    },
+    "internal/collect/collector_test.go": {
+      "TestContainerFilter": 24,
+      "TestDeletingPod": 18,
+      "TestForPodCrashedAppContainer": 80,
+      "TestInitContainerStuck": 22,
+      "TestNodeConditions": 16,
+      "TestOwnerResolution": 25
+    },
+    "internal/engine/classify_test.go": {
+      "TestConfigMissingReferenceExtraction": 17,
+      "TestInitContainerStuckThreshold": 19,
+      "TestNextStepCommandsAreCopyPasteable": 27,
+      "TestSecurityContextConfigErrorIsNotImagePull": 26,
+      "TestSigkillFamilyAndLifecycleNoise": 22,
+      "TestUnschedulableVariants": 20
+    },
+    "internal/engine/helpers.go": {
+      "imagePullContext": 24
+    },
+    "internal/engine/helpers_test.go": {
+      "TestHTImagePullContextAndClassification": 21,
+      "TestHTParseMissingReference": 16,
+      "TestHTParseSchedulingFailure": 36,
+      "TestHTParseVolumeNames": 18,
+      "TestHTProbeBudget": 22,
+      "TestHTPromotePrimary": 18,
+      "TestHTScanLogTailCaseSensitivity": 31,
+      "TestHTUnknownRuleEvidenceBranches": 16
+    },
+    "internal/engine/rules.go": {
+      "appExitNonzeroRule": 38,
+      "configMissingRefRule": 33,
+      "initContainerStuckRule": 24,
+      "probeLivenessRule": 24,
+      "probeStartupRule": 23,
+      "sigkillUnattributedRule": 17,
+      "unknownRule": 34,
+      "unschedulableRule": 17,
+      "volumeMountFailureRule": 21
+    },
+    "internal/engine/rules_test.go": {
+      "TestRtEvictedResourceVariants": 16
+    },
+    "internal/inspect/ai_test.go": {
+      "TestRunAISuccess": 21
+    },
+    "internal/inspect/cluster_error_test.go": {
+      "TestExplainClusterFailure": 29
+    },
+    "internal/inspect/render_test.go": {
+      "TestRunVerboseSecondaryMatches": 28
+    },
+    "internal/sinks/loki.go": {
+      "lokiSink::run": 21
+    },
+    "internal/sinks/loki_test.go": {
+      "TestLokiHappyPathSinglePush": 27
+    },
+    "internal/watch/trigger.go": {
+      "containerWarrantsTrigger": 18
+    }
+  }
+}

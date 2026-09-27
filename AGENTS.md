@@ -31,9 +31,10 @@ make race           # go test -race ./...
 make cover          # race + coverage.out + go tool cover -func
 make fmt            # gofumpt -w . && goimports -w .   (requires gofumpt, goimports)
 make lint           # golangci-lint run                (requires golangci-lint v2)
+make complexity     # go tool bonsai-lint .            (pinned in go.mod, nothing to install)
 make shellcheck     # shellcheck -x on every tracked *.sh  (requires shellcheck)
 make zizmor         # audit .github/ workflows + dependabot.yml (requires zizmor)
-make check          # what CI gates on: lint, shellcheck, zizmor, race, go vet, govulncheck
+make check          # what CI gates on: lint, complexity, shellcheck, zizmor, race, go vet, govulncheck
 make helm-lint       # helm lint + template, asserts pods/log RBAC is present/absent correctly
 make e2e            # kind-based end-to-end run (requires kind, kubectl, jq) — see hack/e2e.sh
 ```
@@ -56,6 +57,14 @@ switch-checking specifically over `engine.CauseCode` with `default-signifies-exh
 by design. Bare `//nolint` (no reason comment) is a lint failure, not just a style nit.
 The layer order under Architecture is enforced by `depguard` rules in `.golangci.yml` — an
 import that points up the stack (or `k8s.io`/`os`/`net` inside `internal/engine`) fails lint.
+
+Cognitive complexity is gated by bonsai-lint (`bonsai-lint.toml`, threshold 15), not golangci-lint's
+`gocognit`. `.bonsai-lint-baseline.json` records the functions that were already over 15 when the
+gate was adopted; each entry holds that function's score, and CI fails if it grows or if any
+other function goes over 15. Don't regenerate the baseline to make a failure go away: fix the
+function instead. After a refactor brings a baselined function down, run
+`go tool bonsai-lint --write-baseline .` so its entry shrinks or disappears, and check the diff
+only ever lowers scores or removes entries.
 
 ## Architecture
 

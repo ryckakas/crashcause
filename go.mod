@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	bonsai.kauneckas.dev/bonsai-lint v0.4.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -72,3 +73,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+tool bonsai.kauneckas.dev/bonsai-lint

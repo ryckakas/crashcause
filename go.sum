@@ -1,3 +1,5 @@
+bonsai.kauneckas.dev/bonsai-lint v0.4.1 h1:cEqAGr4aE3rW3Ue5RJaF9ektM6OBz32wTNCYE6Op4tA=
+bonsai.kauneckas.dev/bonsai-lint v0.4.1/go.mod h1:zg/57QInh0tYlpj+2p9EwbsvXiKFwUZG+Y594w8+Wsg=
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 h1:L/gRVlceqvL25UVaW/CKtUDjefjrs0SPonmDGUVOYP0=
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
