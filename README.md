@@ -293,7 +293,7 @@ meaning does not change.
 | `volume_mount_failure` | `FailedMount` or `FailedAttachVolume` events. |
 | `init_container_failure` | An init container terminated non-zero; the failure is re-classified using only the rules that apply to init containers. |
 | `init_container_stuck` | An init container has been `Running` for longer than `--init-stuck-threshold` (default 10m) without completing, or `activeDeadlineSeconds` was exceeded. Not a crash: a pod stuck at `Init:N/M`. |
-| `unschedulable` | Pod is `Pending` with `FailedScheduling` events; the message is parsed to tell insufficient resources, node-affinity mismatch, untolerated taints and volume zone conflicts apart. Needs no logs and no extra RBAC. |
+| `unschedulable` | Pod is `Pending`, not yet bound to a node, and has `FailedScheduling` events; the message is parsed to tell insufficient resources, node-affinity mismatch, untolerated taints and volume zone conflicts apart. Needs no logs and no extra RBAC. |
 | `app_exit_nonzero` | A clean application-level crash: exit code 1, 2 or another non-zero code with no Kubernetes-side cause. Log-tail patterns (`panic:`, `Fatal`, `ECONNREFUSED`, `OutOfMemoryError`, `MODULE_NOT_FOUND`, segfault/exit 139, and so on) refine the explanation. The main input to the optional AI layer. |
 | `sigkill_after_grace` | Exit 137 **on a pod with a `deletionTimestamp` set**: the app did not stop on `SIGTERM` before its termination grace period ran out. Application-only, high confidence. |
 | `completed_restart_loop` | Exit code 0 with `restartPolicy: Always` on what looks like a run-to-completion workload, so it keeps "succeeding" and restarting forever. |

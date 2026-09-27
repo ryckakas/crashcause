@@ -593,6 +593,67 @@ func TestPendingWithoutFailedSchedulingIsNotUnschedulable(t *testing.T) {
 // Init container stuck (spec §9: 15m over a 10m threshold fires, 5m does not)
 // ---------------------------------------------------------------------------
 
+func TestUnschedulableOnlyWhileUnbound(t *testing.T) {
+	tests := []unboundCase{
+		{
+			name: "still unbound: the FailedScheduling event is current",
+			mutate: func(in *Inputs) {
+				in.NodeName = ""
+			},
+			wantPrimary: CauseUnschedulable,
+		},
+		{
+			name: "bound and still creating containers: nothing to diagnose",
+			mutate: func(in *Inputs) {
+				in.NodeName = "node-1"
+			},
+		},
+		{
+			name: "bound with a stuck init container: the init container is the cause",
+			mutate: func(in *Inputs) {
+				in.NodeName = "node-1"
+				in.Kind = KindInit
+				in.Container = "wait-for-db"
+				in.Running = RunningState{Present: true, StartedAt: fixedNow.Add(-30 * time.Minute)}
+				in.RunningDuration = 30 * time.Minute
+			},
+			wantPrimary: CauseInitContainerStuck,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+type unboundCase struct {
+	name        string
+	mutate      func(*Inputs)
+	wantPrimary CauseCode
+}
+
+func (tc unboundCase) run(t *testing.T) {
+	in := baseInputs()
+	in.PodPhase = "Pending"
+	in.Events = []Event{warning("FailedScheduling",
+		"0/1 nodes are available: 1 node(s) had untolerated taint(s). preemption: 0/1 nodes are available.", 1)}
+	tc.mutate(&in)
+
+	got := Classify(in)
+	if tc.wantPrimary == "" {
+		if len(got) != 0 {
+			t.Fatalf("want zero diagnoses, got %v", causes(got))
+		}
+		return
+	}
+	if len(got) == 0 || got[0].Cause != tc.wantPrimary {
+		t.Fatalf("primary diagnosis = %v, want %s", causes(got), tc.wantPrimary)
+	}
+	if tc.wantPrimary != CauseUnschedulable && hasCause(got, CauseUnschedulable) {
+		t.Errorf("a bound pod must not be reported unschedulable, got %v", causes(got))
+	}
+}
+
 func TestInitContainerStuckThreshold(t *testing.T) {
 	tests := []initStuckThresholdCase{
 		{name: "15m over a 10m threshold", running: 15 * time.Minute, threshold: 10 * time.Minute, want: true, wantConf: ConfidenceMedium},

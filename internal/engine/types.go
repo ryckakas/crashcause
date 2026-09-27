@@ -171,6 +171,7 @@ type Inputs struct {
 	PodPhase      string // "Pending", "Running", "Failed", ...
 	PodReason     string // pod status.reason, e.g. "Evicted"
 	PodMessage    string
+	NodeName      string
 	QOSClass      string
 	RestartPolicy string // "Always", "OnFailure", "Never"
 	RestartCount  int32

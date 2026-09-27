@@ -310,6 +310,7 @@ func (c *Collector) buildInputs(
 		PodPhase:               string(pod.Status.Phase),
 		PodReason:              pod.Status.Reason,
 		PodMessage:             pod.Status.Message,
+		NodeName:               pod.Spec.NodeName,
 		QOSClass:               string(pod.Status.QOSClass),
 		RestartPolicy:          string(pod.Spec.RestartPolicy),
 		Deleting:               pod.DeletionTimestamp != nil,

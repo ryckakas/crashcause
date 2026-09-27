@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A pod that was briefly unschedulable (for example while a node was still
+  tainted not-ready, or while the autoscaler added capacity) was reported as
+  `unschedulable` for as long as the old `FailedScheduling` event lingered,
+  even after it was bound to a node and had a different, real problem such as
+  a stuck init container. `unschedulable` now only fires for a pod the
+  scheduler has not bound yet.
+
 ## [0.1.1] - 2026-08-03
 
 ### Added
