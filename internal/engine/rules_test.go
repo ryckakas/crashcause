@@ -30,13 +30,7 @@ func rtAssertOnlyImagePull(t *testing.T, ds []Diagnosis, want CauseCode) {
 // ---------------------------------------------------------------------------
 
 func TestRtEvictedResourceVariants(t *testing.T) {
-	tests := []struct {
-		name         string
-		podMessage   string
-		wantExplWord string
-		wantResource string
-		wantStep     string
-	}{
+	tests := []evictedVariantCase{
 		{
 			name:         "memory pressure eviction",
 			podMessage:   "The node was low on resource: memory. Threshold quantity: 100Mi, available: 50Mi.",
@@ -61,30 +55,40 @@ func TestRtEvictedResourceVariants(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			in := baseInputs()
-			in.PodPhase = "Failed"
-			in.PodReason = "Evicted"
-			in.PodMessage = tc.podMessage
-			in.Events = []Event{warning("Evicted", tc.podMessage, 1)}
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			d := diagnosisFor(t, Classify(in), CauseEvicted)
-			if d.Confidence != ConfidenceHigh {
-				t.Errorf("confidence is %s, want high", d.Confidence)
-			}
-			if !strings.Contains(d.Explanation, tc.wantExplWord) {
-				t.Errorf("explanation %q does not mention %q", d.Explanation, tc.wantExplWord)
-			}
-			if !evidenceContains(d, "exhausted node resource: "+tc.wantResource) {
-				t.Errorf("evidence must cite the exhausted resource, got %v", d.Evidence)
-			}
-			if len(d.NextSteps) == 0 {
-				t.Fatal("evicted must always suggest next steps")
-			}
-			if !stepsContain(d, tc.wantStep) {
-				t.Errorf("next steps %v do not contain %q", d.NextSteps, tc.wantStep)
-			}
-		})
+type evictedVariantCase struct {
+	name         string
+	podMessage   string
+	wantExplWord string
+	wantResource string
+	wantStep     string
+}
+
+func (tc evictedVariantCase) run(t *testing.T) {
+	in := baseInputs()
+	in.PodPhase = "Failed"
+	in.PodReason = "Evicted"
+	in.PodMessage = tc.podMessage
+	in.Events = []Event{warning("Evicted", tc.podMessage, 1)}
+
+	d := diagnosisFor(t, Classify(in), CauseEvicted)
+	if d.Confidence != ConfidenceHigh {
+		t.Errorf("confidence is %s, want high", d.Confidence)
+	}
+	if !strings.Contains(d.Explanation, tc.wantExplWord) {
+		t.Errorf("explanation %q does not mention %q", d.Explanation, tc.wantExplWord)
+	}
+	if !evidenceContains(d, "exhausted node resource: "+tc.wantResource) {
+		t.Errorf("evidence must cite the exhausted resource, got %v", d.Evidence)
+	}
+	if len(d.NextSteps) == 0 {
+		t.Fatal("evicted must always suggest next steps")
+	}
+	if !stepsContain(d, tc.wantStep) {
+		t.Errorf("next steps %v do not contain %q", d.NextSteps, tc.wantStep)
 	}
 }
 

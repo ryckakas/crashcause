@@ -34,13 +34,7 @@ func execPluginError() error {
 }
 
 func TestExplainClusterFailure(t *testing.T) {
-	cases := []struct {
-		name         string
-		err          error
-		server       string
-		wantReason   string
-		wantVerbatim bool
-	}{
+	cases := []clusterFailureCase{
 		{
 			name:       "credential plugin failure",
 			err:        execPluginError(),
@@ -94,43 +88,53 @@ func TestExplainClusterFailure(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := explainClusterFailure(tc.err, tc.server)
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			if tc.wantVerbatim {
-				// Identity, not chain membership, is the assertion: an unrecognized
-				// error must come back as-is, not wrapped in a misleading hint.
-				if got != tc.err { //nolint:errorlint // see above
-					t.Fatalf("explainClusterFailure() = %v, want the original error untouched", got)
-				}
-				return
-			}
+type clusterFailureCase struct {
+	name         string
+	err          error
+	server       string
+	wantReason   string
+	wantVerbatim bool
+}
 
-			msg := got.Error()
-			if !strings.Contains(msg, "cannot reach or authenticate to") {
-				t.Errorf("message = %q, want it to state the cluster could not be reached", msg)
-			}
-			if !strings.Contains(msg, tc.wantReason) {
-				t.Errorf("message = %q, want it to contain reason %q", msg, tc.wantReason)
-			}
-			if !strings.Contains(msg, "kubectl config current-context") {
-				t.Errorf("message = %q, want it to point at the kubectl context", msg)
-			}
-			if !errors.Is(got, tc.err) {
-				t.Errorf("explainClusterFailure() dropped the original error from the chain")
-			}
-			if !strings.Contains(msg, tc.err.Error()) {
-				t.Errorf("message = %q, want it to keep the underlying detail %q", msg, tc.err.Error())
-			}
+func (tc clusterFailureCase) run(t *testing.T) {
+	got := explainClusterFailure(tc.err, tc.server)
 
-			wantServer := "cluster " + tc.server
-			if tc.server == "" {
-				wantServer = "the cluster"
-			}
-			if !strings.Contains(msg, wantServer) {
-				t.Errorf("message = %q, want it to name %q", msg, wantServer)
-			}
-		})
+	if tc.wantVerbatim {
+		// Identity, not chain membership, is the assertion: an unrecognized
+		// error must come back as-is, not wrapped in a misleading hint.
+		if got != tc.err { //nolint:errorlint // see above
+			t.Fatalf("explainClusterFailure() = %v, want the original error untouched", got)
+		}
+		return
+	}
+
+	msg := got.Error()
+	if !strings.Contains(msg, "cannot reach or authenticate to") {
+		t.Errorf("message = %q, want it to state the cluster could not be reached", msg)
+	}
+	if !strings.Contains(msg, tc.wantReason) {
+		t.Errorf("message = %q, want it to contain reason %q", msg, tc.wantReason)
+	}
+	if !strings.Contains(msg, "kubectl config current-context") {
+		t.Errorf("message = %q, want it to point at the kubectl context", msg)
+	}
+	if !errors.Is(got, tc.err) {
+		t.Errorf("explainClusterFailure() dropped the original error from the chain")
+	}
+	if !strings.Contains(msg, tc.err.Error()) {
+		t.Errorf("message = %q, want it to keep the underlying detail %q", msg, tc.err.Error())
+	}
+
+	wantServer := "cluster " + tc.server
+	if tc.server == "" {
+		wantServer = "the cluster"
+	}
+	if !strings.Contains(msg, wantServer) {
+		t.Errorf("message = %q, want it to name %q", msg, wantServer)
 	}
 }
 

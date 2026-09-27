@@ -259,40 +259,47 @@ func TestProviderNonSuccessStatusNeverLeaksKey(t *testing.T) {
 		testAPIKey + ` ` + strings.Repeat("padding ", 60) + `"}}`
 
 	for _, provider := range SupportedProviders() {
-		t.Run(provider, func(t *testing.T) {
-			srv, _ := newTestServer(t, http.StatusUnauthorized, longBody)
-			p, err := New(Config{Provider: provider, APIKey: testAPIKey, BaseURL: srv.URL})
-			if err != nil {
-				t.Fatalf("New: %v", err)
-			}
+		t.Run(provider, statusLeakCase{provider: provider, body: longBody}.run)
+	}
+}
 
-			summary, err := p.Summarize(context.Background(), sampleRequest())
-			if err == nil {
-				t.Fatalf("expected an error for a 401 response, got summary %q", summary)
-			}
-			if summary != "" {
-				t.Errorf("summary should be empty on error, got %q", summary)
-			}
-			if !errors.Is(err, ErrHTTPStatus) {
-				t.Errorf("error should wrap ErrHTTPStatus, got %v", err)
-			}
-			msg := err.Error()
-			if !strings.Contains(msg, "401") {
-				t.Errorf("error should mention the status code, got %q", msg)
-			}
-			if strings.Contains(msg, testAPIKey) {
-				t.Fatalf("API KEY LEAKED INTO ERROR: %q", msg)
-			}
-			if !strings.Contains(msg, "authentication_error") {
-				t.Errorf("error should quote the provider body, got %q", msg)
-			}
-			if !strings.Contains(msg, "truncated") {
-				t.Errorf("long body should be truncated, got %q", msg)
-			}
-			if len(msg) > 400 {
-				t.Errorf("error message is not bounded (%d chars): %q", len(msg), msg)
-			}
-		})
+type statusLeakCase struct {
+	provider string
+	body     string
+}
+
+func (tc statusLeakCase) run(t *testing.T) {
+	srv, _ := newTestServer(t, http.StatusUnauthorized, tc.body)
+	p, err := New(Config{Provider: tc.provider, APIKey: testAPIKey, BaseURL: srv.URL})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	summary, err := p.Summarize(context.Background(), sampleRequest())
+	if err == nil {
+		t.Fatalf("expected an error for a 401 response, got summary %q", summary)
+	}
+	if summary != "" {
+		t.Errorf("summary should be empty on error, got %q", summary)
+	}
+	if !errors.Is(err, ErrHTTPStatus) {
+		t.Errorf("error should wrap ErrHTTPStatus, got %v", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "401") {
+		t.Errorf("error should mention the status code, got %q", msg)
+	}
+	if strings.Contains(msg, testAPIKey) {
+		t.Fatalf("API KEY LEAKED INTO ERROR: %q", msg)
+	}
+	if !strings.Contains(msg, "authentication_error") {
+		t.Errorf("error should quote the provider body, got %q", msg)
+	}
+	if !strings.Contains(msg, "truncated") {
+		t.Errorf("long body should be truncated, got %q", msg)
+	}
+	if len(msg) > 400 {
+		t.Errorf("error message is not bounded (%d chars): %q", len(msg), msg)
 	}
 }
 
@@ -406,35 +413,13 @@ func TestNewValidation(t *testing.T) {
 }
 
 func TestNewAppliesDefaults(t *testing.T) {
-	tests := []struct {
-		provider string
-		baseURL  string
-		model    string
-	}{
+	tests := []providerDefaultsCase{
 		{ProviderAnthropic, defaultAnthropicBaseURL, defaultAnthropicModel},
 		{ProviderOpenAI, defaultOpenAIBaseURL, defaultOpenAIModel},
 		{ProviderOllama, defaultOllamaBaseURL, defaultOllamaModel},
 	}
 	for _, tc := range tests {
-		t.Run(tc.provider, func(t *testing.T) {
-			p, err := New(Config{Provider: tc.provider, APIKey: testAPIKey})
-			if err != nil {
-				t.Fatalf("New: %v", err)
-			}
-			c := clientOf(t, p)
-			if c.baseURL != tc.baseURL {
-				t.Errorf("baseURL = %q, want %q", c.baseURL, tc.baseURL)
-			}
-			if c.model != tc.model {
-				t.Errorf("model = %q, want %q", c.model, tc.model)
-			}
-			if c.httpClient.Timeout != DefaultTimeout {
-				t.Errorf("timeout = %s, want %s", c.httpClient.Timeout, DefaultTimeout)
-			}
-			if c.maxTokens != DefaultMaxTokens {
-				t.Errorf("maxTokens = %d, want %d", c.maxTokens, DefaultMaxTokens)
-			}
-		})
+		t.Run(tc.provider, tc.run)
 	}
 
 	p, err := New(Config{
@@ -453,6 +438,32 @@ func TestNewAppliesDefaults(t *testing.T) {
 	}
 	if c.model != "mistral" || c.maxTokens != 64 || c.httpClient.Timeout != 3*time.Second {
 		t.Errorf("overrides not applied: %+v", c)
+	}
+}
+
+type providerDefaultsCase struct {
+	provider string
+	baseURL  string
+	model    string
+}
+
+func (tc providerDefaultsCase) run(t *testing.T) {
+	p, err := New(Config{Provider: tc.provider, APIKey: testAPIKey})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c := clientOf(t, p)
+	if c.baseURL != tc.baseURL {
+		t.Errorf("baseURL = %q, want %q", c.baseURL, tc.baseURL)
+	}
+	if c.model != tc.model {
+		t.Errorf("model = %q, want %q", c.model, tc.model)
+	}
+	if c.httpClient.Timeout != DefaultTimeout {
+		t.Errorf("timeout = %s, want %s", c.httpClient.Timeout, DefaultTimeout)
+	}
+	if c.maxTokens != DefaultMaxTokens {
+		t.Errorf("maxTokens = %d, want %d", c.maxTokens, DefaultMaxTokens)
 	}
 }
 

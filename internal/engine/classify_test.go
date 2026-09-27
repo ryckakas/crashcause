@@ -278,12 +278,7 @@ func TestInitContainerExitZeroProducesNoDiagnosis(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSigkillFamilyAndLifecycleNoise(t *testing.T) {
-	tests := []struct {
-		name       string
-		mutate     func(*Inputs)
-		wantCauses []CauseCode // nil means "no diagnosis at all"
-		wantConf   Confidence
-	}{
+	tests := []sigkillFamilyCase{
 		{
 			name: "exit 143 while deleting is normal lifecycle",
 			mutate: func(in *Inputs) {
@@ -375,29 +370,38 @@ func TestSigkillFamilyAndLifecycleNoise(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			in := baseInputs()
-			tc.mutate(&in)
-			got := Classify(in)
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			if tc.wantCauses == nil {
-				if len(got) != 0 {
-					t.Fatalf("want zero diagnoses, got %v", causes(got))
-				}
-				return
-			}
-			if len(got) != len(tc.wantCauses) {
-				t.Fatalf("got causes %v, want exactly %v", causes(got), tc.wantCauses)
-			}
-			for i, c := range tc.wantCauses {
-				if got[i].Cause != c {
-					t.Fatalf("diagnosis %d is %s, want %s (all: %v)", i, got[i].Cause, c, causes(got))
-				}
-			}
-			if tc.wantConf != "" && got[0].Confidence != tc.wantConf {
-				t.Errorf("confidence is %s, want %s", got[0].Confidence, tc.wantConf)
-			}
-		})
+type sigkillFamilyCase struct {
+	name       string
+	mutate     func(*Inputs)
+	wantCauses []CauseCode // nil means "no diagnosis at all"
+	wantConf   Confidence
+}
+
+func (tc sigkillFamilyCase) run(t *testing.T) {
+	in := baseInputs()
+	tc.mutate(&in)
+	got := Classify(in)
+
+	if tc.wantCauses == nil {
+		if len(got) != 0 {
+			t.Fatalf("want zero diagnoses, got %v", causes(got))
+		}
+		return
+	}
+	if len(got) != len(tc.wantCauses) {
+		t.Fatalf("got causes %v, want exactly %v", causes(got), tc.wantCauses)
+	}
+	for i, c := range tc.wantCauses {
+		if got[i].Cause != c {
+			t.Fatalf("diagnosis %d is %s, want %s (all: %v)", i, got[i].Cause, c, causes(got))
+		}
+	}
+	if tc.wantConf != "" && got[0].Confidence != tc.wantConf {
+		t.Errorf("confidence is %s, want %s", got[0].Confidence, tc.wantConf)
 	}
 }
 
@@ -477,12 +481,7 @@ func TestSigkillAfterGraceNextSteps(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUnschedulableVariants(t *testing.T) {
-	tests := []struct {
-		name         string
-		message      string
-		wantInExpl   []string
-		wantEvidence string
-	}{
+	tests := []unschedulableVariantCase{
 		{
 			name: "insufficient cpu",
 			message: "0/5 nodes are available: 3 Insufficient cpu, 2 Insufficient memory. " +
@@ -511,33 +510,42 @@ func TestUnschedulableVariants(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			in := baseInputs()
-			in.PodPhase = "Pending"
-			in.LogsUnavailable = true // no logs exist for a pod that never ran
-			in.Requests = map[string]string{"cpu": "32", "memory": "64Gi"}
-			in.Events = []Event{warning("FailedScheduling", tc.message, 3)}
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			got := Classify(in)
-			d := diagnosisFor(t, got, CauseUnschedulable)
-			if d.Confidence != ConfidenceHigh {
-				t.Errorf("confidence is %s, want high", d.Confidence)
-			}
-			for _, want := range tc.wantInExpl {
-				if !strings.Contains(strings.ToLower(d.Explanation), strings.ToLower(want)) {
-					t.Errorf("explanation %q does not mention %q", d.Explanation, want)
-				}
-			}
-			if !evidenceContains(d, tc.wantEvidence) {
-				t.Errorf("evidence %v does not contain %q", d.Evidence, tc.wantEvidence)
-			}
-			if !evidenceContains(d, "container requests: cpu=32") {
-				t.Errorf("evidence must include the pod's requests, got %v", d.Evidence)
-			}
-			if len(d.NextSteps) == 0 {
-				t.Error("unschedulable must always suggest next steps")
-			}
-		})
+type unschedulableVariantCase struct {
+	name         string
+	message      string
+	wantInExpl   []string
+	wantEvidence string
+}
+
+func (tc unschedulableVariantCase) run(t *testing.T) {
+	in := baseInputs()
+	in.PodPhase = "Pending"
+	in.LogsUnavailable = true // no logs exist for a pod that never ran
+	in.Requests = map[string]string{"cpu": "32", "memory": "64Gi"}
+	in.Events = []Event{warning("FailedScheduling", tc.message, 3)}
+
+	got := Classify(in)
+	d := diagnosisFor(t, got, CauseUnschedulable)
+	if d.Confidence != ConfidenceHigh {
+		t.Errorf("confidence is %s, want high", d.Confidence)
+	}
+	for _, want := range tc.wantInExpl {
+		if !strings.Contains(strings.ToLower(d.Explanation), strings.ToLower(want)) {
+			t.Errorf("explanation %q does not mention %q", d.Explanation, want)
+		}
+	}
+	if !evidenceContains(d, tc.wantEvidence) {
+		t.Errorf("evidence %v does not contain %q", d.Evidence, tc.wantEvidence)
+	}
+	if !evidenceContains(d, "container requests: cpu=32") {
+		t.Errorf("evidence must include the pod's requests, got %v", d.Evidence)
+	}
+	if len(d.NextSteps) == 0 {
+		t.Error("unschedulable must always suggest next steps")
 	}
 }
 
@@ -556,14 +564,7 @@ func TestPendingWithoutFailedSchedulingIsNotUnschedulable(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestInitContainerStuckThreshold(t *testing.T) {
-	tests := []struct {
-		name      string
-		running   time.Duration
-		threshold time.Duration
-		deadline  bool
-		want      bool
-		wantConf  Confidence
-	}{
+	tests := []initStuckThresholdCase{
 		{name: "15m over a 10m threshold", running: 15 * time.Minute, threshold: 10 * time.Minute, want: true, wantConf: ConfidenceMedium},
 		{name: "5m under a 10m threshold", running: 5 * time.Minute, threshold: 10 * time.Minute, want: false},
 		{name: "exactly at the threshold does not fire", running: 10 * time.Minute, threshold: 10 * time.Minute, want: false},
@@ -573,34 +574,45 @@ func TestInitContainerStuckThreshold(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			in := baseInputs()
-			in.Kind = KindInit
-			in.Container = "wait-for-db"
-			in.PodPhase = "Pending"
-			in.Running = RunningState{Present: true, StartedAt: fixedNow.Add(-tc.running)}
-			in.RunningDuration = tc.running
-			in.InitStuckThreshold = tc.threshold
-			in.ActiveDeadlineExceeded = tc.deadline
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			got := Classify(in)
-			if !tc.want {
-				if len(got) != 0 {
-					t.Fatalf("want no diagnosis, got %v", causes(got))
-				}
-				return
-			}
-			d := diagnosisFor(t, got, CauseInitContainerStuck)
-			if d.Confidence != tc.wantConf {
-				t.Errorf("confidence is %s, want %s", d.Confidence, tc.wantConf)
-			}
-			if !tc.deadline && !evidenceContains(d, "10m0s") {
-				t.Errorf("evidence must state the threshold, got %v", d.Evidence)
-			}
-			if tc.deadline && !evidenceContains(d, "activeDeadlineSeconds") {
-				t.Errorf("evidence must cite the exceeded deadline, got %v", d.Evidence)
-			}
-		})
+type initStuckThresholdCase struct {
+	name      string
+	running   time.Duration
+	threshold time.Duration
+	deadline  bool
+	want      bool
+	wantConf  Confidence
+}
+
+func (tc initStuckThresholdCase) run(t *testing.T) {
+	in := baseInputs()
+	in.Kind = KindInit
+	in.Container = "wait-for-db"
+	in.PodPhase = "Pending"
+	in.Running = RunningState{Present: true, StartedAt: fixedNow.Add(-tc.running)}
+	in.RunningDuration = tc.running
+	in.InitStuckThreshold = tc.threshold
+	in.ActiveDeadlineExceeded = tc.deadline
+
+	got := Classify(in)
+	if !tc.want {
+		if len(got) != 0 {
+			t.Fatalf("want no diagnosis, got %v", causes(got))
+		}
+		return
+	}
+	d := diagnosisFor(t, got, CauseInitContainerStuck)
+	if d.Confidence != tc.wantConf {
+		t.Errorf("confidence is %s, want %s", d.Confidence, tc.wantConf)
+	}
+	if !tc.deadline && !evidenceContains(d, "10m0s") {
+		t.Errorf("evidence must state the threshold, got %v", d.Evidence)
+	}
+	if tc.deadline && !evidenceContains(d, "activeDeadlineSeconds") {
+		t.Errorf("evidence must cite the exceeded deadline, got %v", d.Evidence)
 	}
 }
 
@@ -620,13 +632,7 @@ func TestInitStuckRuleNeverFiresForAppContainers(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestConfigMissingReferenceExtraction(t *testing.T) {
-	tests := []struct {
-		name     string
-		message  string
-		wantName string
-		wantKey  string
-		wantCmd  string
-	}{
+	tests := []configMissingRefCase{
 		{
 			name:     "missing secret",
 			message:  `secret "db-credentials" not found`,
@@ -649,29 +655,39 @@ func TestConfigMissingReferenceExtraction(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			in := baseInputs()
-			in.PodPhase = "Pending"
-			in.Waiting = WaitingState{Present: true, Reason: "CreateContainerConfigError", Message: tc.message}
-			in.Events = []Event{warning("Failed", "Error: "+tc.message, 5)}
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			d := diagnosisFor(t, Classify(in), CauseConfigMissingRef)
-			if d.Confidence != ConfidenceHigh {
-				t.Errorf("confidence is %s, want high", d.Confidence)
-			}
-			if !evidenceContains(d, tc.wantName) {
-				t.Errorf("evidence must name %q, got %v", tc.wantName, d.Evidence)
-			}
-			if tc.wantKey != "" && !evidenceContains(d, tc.wantKey) {
-				t.Errorf("evidence must name the missing key %q, got %v", tc.wantKey, d.Evidence)
-			}
-			if !strings.Contains(d.Explanation, tc.wantName) {
-				t.Errorf("explanation must name %q, got %q", tc.wantName, d.Explanation)
-			}
-			if !stepsContain(d, tc.wantCmd) {
-				t.Errorf("next steps must include %q, got %v", tc.wantCmd, d.NextSteps)
-			}
-		})
+type configMissingRefCase struct {
+	name     string
+	message  string
+	wantName string
+	wantKey  string
+	wantCmd  string
+}
+
+func (tc configMissingRefCase) run(t *testing.T) {
+	in := baseInputs()
+	in.PodPhase = "Pending"
+	in.Waiting = WaitingState{Present: true, Reason: "CreateContainerConfigError", Message: tc.message}
+	in.Events = []Event{warning("Failed", "Error: "+tc.message, 5)}
+
+	d := diagnosisFor(t, Classify(in), CauseConfigMissingRef)
+	if d.Confidence != ConfidenceHigh {
+		t.Errorf("confidence is %s, want high", d.Confidence)
+	}
+	if !evidenceContains(d, tc.wantName) {
+		t.Errorf("evidence must name %q, got %v", tc.wantName, d.Evidence)
+	}
+	if tc.wantKey != "" && !evidenceContains(d, tc.wantKey) {
+		t.Errorf("evidence must name the missing key %q, got %v", tc.wantKey, d.Evidence)
+	}
+	if !strings.Contains(d.Explanation, tc.wantName) {
+		t.Errorf("explanation must name %q, got %q", tc.wantName, d.Explanation)
+	}
+	if !stepsContain(d, tc.wantCmd) {
+		t.Errorf("next steps must include %q, got %v", tc.wantCmd, d.NextSteps)
 	}
 }
 
@@ -679,11 +695,7 @@ func TestConfigMissingReferenceExtraction(t *testing.T) {
 // caused by runAsNonRoot vs a root image was reported as image_pull_other,
 // because the Failed event message happens to contain the word "image".
 func TestSecurityContextConfigErrorIsNotImagePull(t *testing.T) {
-	tests := []struct {
-		name     string
-		message  string
-		wantExpl string
-	}{
+	tests := []securityContextCase{
 		{
 			name:     "image runs as root",
 			message:  "container has runAsNonRoot and image will run as root",
@@ -702,42 +714,50 @@ func TestSecurityContextConfigErrorIsNotImagePull(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			in := baseInputs()
-			in.Container = "nginx-proxy"
-			in.Image = "nginx:alpine"
-			in.PodPhase = "Pending"
-			in.Waiting = WaitingState{Present: true, Reason: "CreateContainerConfigError", Message: tc.message}
-			in.Events = []Event{
-				warning("Failed", "Error: "+tc.message, 8480),
-				{Type: "Normal", Reason: "Pulled", Message: `Container image "nginx:alpine" already present on machine`, Count: 8479},
-			}
+		t.Run(tc.name, tc.run)
+	}
+}
 
-			ds := Classify(in)
-			if len(ds) == 0 {
-				t.Fatal("expected a diagnosis")
-			}
-			for _, c := range []CauseCode{CauseImagePullAuth, CauseImagePullNotFound, CauseImagePullOther} {
-				if hasCause(ds, c) {
-					t.Errorf("the image was pulled successfully, %s must not fire; got %v", c, causes(ds))
-				}
-			}
-			if hasCause(ds, CauseConfigMissingRef) {
-				t.Errorf("no ConfigMap/Secret reference is missing, config_missing_reference must stand down; got %v", causes(ds))
-			}
-			if ds[0].Cause != CauseSecurityContextViolation {
-				t.Fatalf("primary diagnosis is %s, want %s (all: %v)", ds[0].Cause, CauseSecurityContextViolation, causes(ds))
-			}
-			if ds[0].Confidence != ConfidenceHigh {
-				t.Errorf("confidence is %s, want high", ds[0].Confidence)
-			}
-			if !evidenceContains(ds[0], tc.message) {
-				t.Errorf("evidence must quote the kubelet message %q, got %v", tc.message, ds[0].Evidence)
-			}
-			if !strings.Contains(ds[0].Explanation, tc.wantExpl) {
-				t.Errorf("explanation must contain %q, got %q", tc.wantExpl, ds[0].Explanation)
-			}
-		})
+type securityContextCase struct {
+	name     string
+	message  string
+	wantExpl string
+}
+
+func (tc securityContextCase) run(t *testing.T) {
+	in := baseInputs()
+	in.Container = "nginx-proxy"
+	in.Image = "nginx:alpine"
+	in.PodPhase = "Pending"
+	in.Waiting = WaitingState{Present: true, Reason: "CreateContainerConfigError", Message: tc.message}
+	in.Events = []Event{
+		warning("Failed", "Error: "+tc.message, 8480),
+		{Type: "Normal", Reason: "Pulled", Message: `Container image "nginx:alpine" already present on machine`, Count: 8479},
+	}
+
+	ds := Classify(in)
+	if len(ds) == 0 {
+		t.Fatal("expected a diagnosis")
+	}
+	for _, c := range []CauseCode{CauseImagePullAuth, CauseImagePullNotFound, CauseImagePullOther} {
+		if hasCause(ds, c) {
+			t.Errorf("the image was pulled successfully, %s must not fire; got %v", c, causes(ds))
+		}
+	}
+	if hasCause(ds, CauseConfigMissingRef) {
+		t.Errorf("no ConfigMap/Secret reference is missing, config_missing_reference must stand down; got %v", causes(ds))
+	}
+	if ds[0].Cause != CauseSecurityContextViolation {
+		t.Fatalf("primary diagnosis is %s, want %s (all: %v)", ds[0].Cause, CauseSecurityContextViolation, causes(ds))
+	}
+	if ds[0].Confidence != ConfidenceHigh {
+		t.Errorf("confidence is %s, want high", ds[0].Confidence)
+	}
+	if !evidenceContains(ds[0], tc.message) {
+		t.Errorf("evidence must quote the kubelet message %q, got %v", tc.message, ds[0].Evidence)
+	}
+	if !strings.Contains(ds[0].Explanation, tc.wantExpl) {
+		t.Errorf("explanation must contain %q, got %q", tc.wantExpl, ds[0].Explanation)
 	}
 }
 
@@ -1195,29 +1215,36 @@ func TestNextStepCommandsAreCopyPasteable(t *testing.T) {
 		"app_crash":  appCrash,
 		"init_stuck": initStuck,
 	} {
-		t.Run(name, func(t *testing.T) {
-			got := Classify(in)
-			if len(got) == 0 {
-				t.Fatalf("fixture produced no diagnosis")
+		t.Run(name, copyPasteCase{in: in}.run)
+	}
+}
+
+type copyPasteCase struct {
+	in Inputs
+}
+
+func (tc copyPasteCase) run(t *testing.T) {
+	in := tc.in
+	got := Classify(in)
+	if len(got) == 0 {
+		t.Fatalf("fixture produced no diagnosis")
+	}
+	for _, d := range got {
+		for _, step := range d.NextSteps {
+			// The namespace must never be glued to whatever follows
+			// it: "-n production-c api" instead of "-n production -c api".
+			if strings.Contains(step, in.Namespace+"-") {
+				t.Errorf("cause %s: namespace is concatenated with the next flag:\n  %s", d.Cause, step)
 			}
-			for _, d := range got {
-				for _, step := range d.NextSteps {
-					// The namespace must never be glued to whatever follows
-					// it: "-n production-c api" instead of "-n production -c api".
-					if strings.Contains(step, in.Namespace+"-") {
-						t.Errorf("cause %s: namespace is concatenated with the next flag:\n  %s", d.Cause, step)
-					}
-					// Likewise the pod name, which is always followed by a
-					// space or ends the command.
-					if strings.Contains(step, in.Pod+"-n ") {
-						t.Errorf("cause %s: pod name is concatenated with the next flag:\n  %s", d.Cause, step)
-					}
-					if strings.Contains(step, "  ") && !strings.Contains(step, "    #") {
-						t.Errorf("cause %s: double space outside the trailing comment:\n  %s", d.Cause, step)
-					}
-				}
+			// Likewise the pod name, which is always followed by a
+			// space or ends the command.
+			if strings.Contains(step, in.Pod+"-n ") {
+				t.Errorf("cause %s: pod name is concatenated with the next flag:\n  %s", d.Cause, step)
 			}
-		})
+			if strings.Contains(step, "  ") && !strings.Contains(step, "    #") {
+				t.Errorf("cause %s: double space outside the trailing comment:\n  %s", d.Cause, step)
+			}
+		}
 	}
 }
 
