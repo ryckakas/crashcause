@@ -1,6 +1,6 @@
 # The AI layer
 
-The deep-dive behind the README's [AI layer](../README.md#ai-layer-optional-default-off)
+The deep-dive behind the README's [AI summaries](../README.md#ai-summaries-optional-off-by-default)
 summary: providers and key handling, exactly what is and is never sent, how redaction
 works and where it deliberately stops, and what happens when a provider call fails.
 

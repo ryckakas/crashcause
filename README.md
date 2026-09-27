@@ -1,169 +1,74 @@
-![crashcause](docs/images/cover-hero.jpg)
-
 # crashcause
 
-Answers "why did this pod crash?" from live cluster state — no copy-pasting `describe`
-or `logs` output anywhere.
+![crashcause: explains why a Kubernetes pod crashed](docs/images/cover-hero.jpg)
+
+**Find out why a Kubernetes pod crashed, straight from live cluster state.**
+
+No `kubectl describe`, no `kubectl logs --previous`, no pasting output into anything. crashcause
+reads the pod's status, events, previous-container logs and node conditions itself, and names the
+cause as one of 18 stable cause codes: `oom_killed`, `probe_liveness_failure`,
+`config_missing_reference` and so on.
+
+It runs two ways. `crashcause inspect` is a kubectl plugin that diagnoses one pod on demand.
+`crashcause watch` is an in-cluster controller that turns every crash in the cluster into a
+Prometheus label and a structured log line for Loki and Grafana.
 
 [![CI](https://github.com/ryckakas/crashcause/actions/workflows/ci.yml/badge.svg)](https://github.com/ryckakas/crashcause/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ryckakas/crashcause)](https://github.com/ryckakas/crashcause/releases/latest)
 ![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8)
 ![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-> **Status: pre-1.0.** CLI flags and chart values may still change between minor
-> versions; the 18 cause codes are the stable part of the contract. The tool has not yet
-> been exercised against real production clusters at scale. Not yet in the
-> [krew index](https://github.com/kubernetes-sigs/krew-index), so
-> `kubectl krew install crashcause` does not work yet — install from the released plugin
-> manifest as shown under [Install](#install). See [`CHANGELOG.md`](./CHANGELOG.md) for
-> what shipped.
+Pre-1.0: flags and chart values may still change between minor versions. The 18 cause codes are
+the stable part of the contract.
 
-## What it is, and why
+## Why this one
 
-Diagnosing a crashing pod today is a manual ritual: `kubectl describe`, `kubectl logs
---previous`, scrolling through events, and eyeballing metrics to correlate a restart with
-an OOM kill or a failed probe. `crashcause` automates that correlation and turns the
-*cause* of a crash — not just the fact that one happened — into a first-class, queryable
-signal.
-
-Three things differentiate it from "paste your logs into a UI" tools:
-
-1. **Zero copy-paste, live-cluster.** It talks to the Kubernetes API directly: pod status,
-   container states, events, previous-container logs, and node conditions. You point it at
-   a pod (or a cluster, for `watch`); it collects the evidence itself.
-2. **Native observability integration.** Crash *causes* — `oom_killed`,
-   `probe_liveness_failure`, `config_missing_reference`, and so on — become a Prometheus
-   metric label and a structured log field, not just prose in a report. Where
-   `kube-state-metrics` tells you a pod is in `CrashLoopBackOff`, `crashcause` tells you
-   *why*, as a queryable dimension: `oom_killed` vs. `probe_liveness_failure` vs.
-   `config_missing_reference`, filterable and alertable in Grafana with no extra tooling.
-3. **Optional AI layer, BYO-key.** When the rule engine lands on `app_exit_nonzero` or
-   `unknown` — an application bug the rules can't interpret any further — an opt-in layer
-   (`--ai`, default off) sends the log tail and diagnosis evidence to your own
-   `anthropic`/`openai`/`ollama` key for a short natural-language summary. See
-   [AI layer](#ai-layer-optional-default-off) for exactly what is and is never sent.
-
-## Cause codes
-
-Every diagnosis carries one of 18 stable, snake_case cause codes
-(`internal/engine/types.go`). They are part of the tool's external contract: once
-released, a code's meaning does not change.
-
-<details>
-<summary><b>All 18 cause codes (the stable contract)</b></summary>
-
-| Cause code | Meaning |
-|---|---|
-| `oom_killed` | Container's last termination reason was exactly `OOMKilled` (kernel cgroup attribution). Never inferred from a bare exit 137 — usage data isn't recoverable after the fact from the Kubernetes API. |
-| `sigkill_unattributed` | Exit code 137 (SIGKILL) **without** `reason=OOMKilled` and **without** the pod being deleted. Suspects: a node-level OOM kill that wasn't cgroup-attributed, or an external SIGKILL. |
-| `evicted` | Pod status reason is `Evicted`; the eviction message is parsed for the pressured resource (memory/disk/pids). |
-| `probe_liveness_failure` | A `Killing` event plus `Unhealthy` (liveness) events — the liveness probe killed the container. |
-| `probe_startup_failure` | `Unhealthy` (startup) events plus a restart; flags a too-tight `failureThreshold` x `periodSeconds` against observed startup time when derivable. |
-| `image_pull_auth` | `ErrImagePull`/`ImagePullBackOff` with a message matching authorization failure (401/403, "pull access denied"). |
-| `image_pull_not_found` | Image pull failure with a message matching "not found" / "manifest unknown". |
-| `image_pull_other` | Any other pull failure: timeout, TLS error, registry quota, etc. |
-| `security_context_violation` | `CreateContainerConfigError` where the kubelet message shows a securityContext rejection: `runAsNonRoot: true` against an image that runs as root (or declares a non-numeric user). The image pulled fine — the container was refused by a pre-start config check and never started. |
-| `config_missing_reference` | `CreateContainerConfigError` — a referenced ConfigMap/Secret/key doesn't exist; the message identifies which one. securityContext rejections are reported as `security_context_violation`, not this code. |
-| `volume_mount_failure` | `FailedMount` / `FailedAttachVolume` events. |
-| `init_container_failure` | An init container terminated non-zero; the failure is re-classified using only init-applicable rules. |
-| `init_container_stuck` | An init container has been `Running` for longer than `--init-stuck-threshold` (default 10m) without completing, or `activeDeadlineSeconds` was exceeded. Not a crash — a pod stuck at `Init:N/M`. |
-| `unschedulable` | Pod is `Pending` with `FailedScheduling` events; the message is parsed to distinguish insufficient resources, node-affinity mismatch, untolerated taints, or volume zone conflicts. Requires no logs and no extra RBAC. |
-| `app_exit_nonzero` | A clean application-level crash: exit code 1, 2, or another non-zero code with no Kubernetes-side cause. Log-tail patterns (`panic:`, `Fatal`, `ECONNREFUSED`, `OutOfMemoryError`, `MODULE_NOT_FOUND`, segfault/exit 139, etc.) refine the explanation. This is the primary input to the optional AI layer. |
-| `sigkill_after_grace` | Exit 137 **on a pod with a `deletionTimestamp` set** — the app did not stop on `SIGTERM` before its termination grace period expired. Application-only, high confidence. |
-| `completed_restart_loop` | Exit code 0 with `restartPolicy: Always` on what looks like a run-to-completion workload — it keeps "succeeding" and restarting forever. |
-| `unknown` | Nothing matched confidently. Evidence collected so far is still reported; the AI layer (if enabled) is the suggested next step. |
-
-Two related behaviors worth calling out explicitly because they are easy to get wrong by
-hand: exit code **143 during a rolling deploy, scale-down, or deletion is normal pod
-lifecycle** (the pod has a `deletionTimestamp`, or its owner is mid rolling-update) and is
-deliberately **not reported at all** — otherwise every deploy would look like a stream of
-crash findings. Exit 143 *outside* any deletion context (something inside the container
-sent itself a `SIGTERM`) is folded into `app_exit_nonzero` evidence at low confidence
-instead of being invented as its own cause.
-
-</details>
-
-## 5-minute demo
-
-The full walkthrough — with a `kind` cluster config and one manifest per cause code
-(OOM kill, bad liveness probe, missing Secret reference, bad image tag, an unschedulable
-resource request, and a stuck init container) — lives in
-[`examples/kind-demo/README.md`](./examples/kind-demo/README.md). Headline commands:
-
-```sh
-# 1. stand up a disposable cluster
-kind create cluster --config examples/kind-demo/kind-config.yaml
-
-# 2. build the binary
-go build -o bin/crashcause ./cmd/crashcause
-
-# 3. break some pods on purpose
-kubectl apply -f examples/kind-demo/namespace.yaml
-kubectl apply -f examples/kind-demo/oom.yaml -f examples/kind-demo/bad-probe.yaml \
-  -f examples/kind-demo/missing-secret.yaml -f examples/kind-demo/bad-image.yaml \
-  -f examples/kind-demo/unschedulable.yaml -f examples/kind-demo/stuck-init.yaml
-
-# 4. ask crashcause why
-./bin/crashcause inspect oom-demo -n crashcause-demo
-```
-
-See the demo README for the full manifest-to-cause-code mapping, timing notes for each
-scenario, and cleanup instructions.
+- **No copy-paste.** It talks to the Kubernetes API directly and collects the evidence itself.
+  Point it at one pod, or at the whole cluster.
+- **The cause becomes a metric label.** kube-state-metrics tells you a pod is in
+  `CrashLoopBackOff`. crashcause tells you why, as `cause="oom_killed"`, which you can filter,
+  graph and alert on in Grafana with no extra tooling.
+- **Stable codes, not prose.** Every diagnosis resolves to one of 18 snake_case codes, and a
+  released code never changes meaning.
+- **Normal deploys stay quiet.** A SIGTERM (exit 143) during a rolling update, scale-down or pod
+  deletion is ordinary lifecycle, so it is not reported at all.
+- **Every permission can be removed.** Turn off log collection and the chart drops the
+  `pods/log` RBAC rule entirely. `inspect` needs no RBAC of its own: it runs with your kubeconfig.
+- **AI only if you ask.** When the rules land on an application crash they can't explain further,
+  `--ai` summarizes the log tail with your own Anthropic, OpenAI or Ollama key. Off by default,
+  and fail-closed per namespace in `watch`.
 
 ## Install
 
-### As a kubectl plugin (for `inspect`)
-
-crashcause is not in the krew index yet, so `kubectl krew install crashcause` does not
-work. Until the index entry lands, install from the plugin manifest published with each
-release — the `latest` URL below always resolves to the newest release's manifest, which
-points at that release's archives and verifies their sha256. (`--manifest-url` is krew's
-development-only install path; it works fine here, it just isn't how a published plugin
-is normally fetched.)
-
 ```sh
+# kubectl plugin, for inspect
 kubectl krew install --manifest-url=https://github.com/ryckakas/crashcause/releases/latest/download/crashcause.yaml
-```
 
-Prebuilt `linux`/`darwin` `amd64`/`arm64` archives (plus `checksums.txt` and SBOMs) are
-attached to every release at
-[github.com/ryckakas/crashcause/releases](https://github.com/ryckakas/crashcause/releases)
-if you would rather drop the binary on your `PATH` yourself — name it `kubectl-crashcause`
-to get the `kubectl crashcause` subcommand form without krew.
-
-Or build/install from source with Go 1.26+ (any Go ≥ 1.21 also works — the
-`go` command auto-downloads the toolchain pinned in `go.mod`):
-
-```sh
+# or from source (any Go 1.21+; the go command fetches the toolchain pinned in go.mod)
 go install github.com/ryckakas/crashcause/cmd/crashcause@latest
 
-# or, from a checkout:
-go build -o bin/crashcause ./cmd/crashcause
+# in-cluster controller, for watch
+helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause -n crashcause --create-namespace
 ```
 
-### In-cluster `watch` mode (Helm)
+crashcause is not in the krew index yet, so `kubectl krew install crashcause` does not work until
+the submission is accepted. The manifest URL above always resolves to the newest release, and krew
+verifies each archive's sha256 against it.
 
-The chart is published as an OCI artifact to GitHub Container Registry:
-
-```sh
-helm install crashcause oci://ghcr.io/ryckakas/charts/crashcause \
-  -n crashcause --create-namespace \
-  -f my-values.yaml
-```
-
-Helm resolves the newest published chart version; add `--version X.Y.Z` to pin a
-specific release. `helm show values oci://ghcr.io/ryckakas/charts/crashcause` prints the
-full default values, and [`charts/crashcause/README.md`](./charts/crashcause/README.md)
-is the full values reference.
+Prebuilt `linux` and `darwin` archives for `amd64` and `arm64`, with checksums and SBOMs, are
+attached to every [release](https://github.com/ryckakas/crashcause/releases). Name the binary
+`kubectl-crashcause` to get the `kubectl crashcause` form without krew.
 
 <details>
-<summary><b>Example values files and notable keys</b></summary>
+<summary><b>Helm: values files and notable keys</b></summary>
 
-To install from a checkout instead — for local development, or to try chart changes
-before they are released:
+Helm installs the newest chart version; add `--version X.Y.Z` to pin one.
+`helm show values oci://ghcr.io/ryckakas/charts/crashcause` prints every default, and
+[`charts/crashcause/README.md`](./charts/crashcause/README.md) is the full values reference. To
+try chart changes from a checkout:
 
 ```sh
-helm install crashcause ./charts/crashcause -n crashcause --create-namespace \
-  -f my-values.yaml
+helm install crashcause ./charts/crashcause -n crashcause --create-namespace -f my-values.yaml
 ```
 
 A minimal values file, watching everything with the default sinks:
@@ -184,9 +89,8 @@ metrics:
   addr: ":9090"
 ```
 
-A locked-down values file for a namespace you don't want the controller reading logs
-from at all — note that `logCollection.enabled: false` removes the `pods/log` RBAC verb
-from the chart's ClusterRole entirely, it does not just leave it configured off:
+A locked-down one. `logCollection.enabled: false` does not just switch log reading off: it removes
+the `pods/log` verb from the chart's ClusterRole, so the controller cannot read logs at all.
 
 ```yaml
 # my-values.locked-down.yaml
@@ -198,7 +102,7 @@ logCollection:
   enabled: false          # controller CANNOT read pod logs; RBAC rule is omitted
 
 ai:
-  enabled: false          # no AI layer for this namespace scope
+  enabled: false
 
 metrics:
   enabled: true
@@ -208,54 +112,36 @@ serviceMonitor:
   enabled: false
 ```
 
-Notable `values.yaml` keys: `watch.namespaces`, `watch.selector`, `watch.reemitInterval`,
-`watch.dedupTTL`, `watch.previousLines`, `watch.initStuckThreshold`,
-`logCollection.enabled`, `logCollection.namespaces`, `logCollection.rateLimitPerMinute`,
-`metrics.enabled`, `metrics.addr`, `serviceMonitor.enabled`, `serviceMonitor.labels`,
-`serviceMonitor.skipCapabilityCheck`, `loki.url`, `loki.existingSecret`, `ai.enabled`,
-`ai.provider`, `ai.url`, `ai.namespaces` (empty = nothing summarized, `["*"]` = whole
-cluster — see [AI layer](#ai-layer-optional-default-off) below), `ai.redact`,
-`ai.redactIPs`, `ai.existingSecret`, `ai.secretKey`, `leaderElection.enabled`,
-`replicas`. `serviceMonitor.skipCapabilityCheck` (default `false`) lets `helm template`
-render the `ServiceMonitor` without a live cluster connection — useful for GitOps
-pipelines that template offline, where the chart can't check whether the
-`monitoring.coreos.com/v1` CRD is actually installed; without it (or a real CRD check
-passing), enabling `serviceMonitor` against an offline template run fails loudly rather
-than rendering a resource the cluster can't accept. See
-[`charts/crashcause/README.md`](./charts/crashcause/README.md) for the full reference,
-and the [AI layer](#ai-layer-optional-default-off) and
-[Security & RBAC](#security--rbac) sections below for what those keys actually control.
+Notable keys: `watch.namespaces`, `watch.selector`, `watch.reemitInterval`, `watch.dedupTTL`,
+`watch.previousLines`, `watch.initStuckThreshold`, `logCollection.enabled`,
+`logCollection.namespaces`, `logCollection.rateLimitPerMinute`, `metrics.enabled`, `metrics.addr`,
+`serviceMonitor.enabled`, `serviceMonitor.labels`, `serviceMonitor.skipCapabilityCheck`,
+`loki.url`, `loki.existingSecret`, `ai.enabled`, `ai.provider`, `ai.url`, `ai.namespaces`,
+`ai.redact`, `ai.redactIPs`, `ai.existingSecret`, `ai.secretKey`, `leaderElection.enabled`,
+`replicas`.
+
+`ai.namespaces` is empty by default, which means nothing is summarized; `["*"]` opts the whole
+cluster in. `serviceMonitor.skipCapabilityCheck` (default `false`) lets `helm template` render the
+`ServiceMonitor` offline, for GitOps pipelines that cannot check whether the
+`monitoring.coreos.com/v1` CRD is installed. Without it, enabling `serviceMonitor` in an offline
+render fails loudly instead of producing a resource the cluster can't accept.
 
 </details>
 
-## `inspect` usage
+## Use it
 
 ```sh
-crashcause inspect <pod> [flags]
+crashcause inspect my-pod -n shop          # why did this pod crash?
+crashcause inspect my-pod -c sidecar       # one container only
+crashcause inspect my-pod --verbose        # every rule that matched, not just the primary
+crashcause inspect my-pod --output json    # for scripts and CI
+crashcause inspect my-pod --ai             # add an AI summary; the key comes from CRASHCAUSE_AI_API_KEY
 ```
 
-Exit codes: `0` diagnosed, `2` pod exists but isn't crashing (nothing to diagnose), `1`
-error. See the [Exit codes](#exit-codes) section for the full table.
+Installed through krew, the same commands start with `kubectl crashcause`.
 
-<details>
-<summary><b><code>inspect</code> flags</b></summary>
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `-c, --container` | (unset) | Restrict the diagnosis to one container. By default every container that warrants diagnosis is reported. |
-| `--output` | `human` | `human` or `json`. |
-| `--previous-lines` | `60` | Lines to fetch from the previous container's log tail. |
-| `--init-stuck-threshold` | `10m` | How long an init container may run before it's reported as `init_container_stuck`. |
-| `--verbose` | `false` | Report every rule that matched, not just the primary diagnosis. |
-| `--ai` | `false` | Enable the optional AI summary (see [AI layer](#ai-layer-optional-default-off)). |
-| `-n, --namespace`, `--kubeconfig`, `--context`, ... | — | Standard `k8s.io/cli-runtime` kubeconfig flags (krew-compatible). |
-| `--log-level` (root, persistent) | `info` | `debug\|info\|warn\|error`. |
-
-</details>
-
-The human report is compact and evidence-first: cause, confidence, a plain-language
-explanation, evidence bullets, and suggested next steps. **The output below is an
-illustration of the report format, not a transcript of a real run:**
+The report leads with the evidence: cause, confidence, a plain explanation, evidence bullets and
+next steps. This one illustrates the format rather than transcribing a real run:
 
 ```text
 crashcause-demo/oom-demo container app — oom_killed (high confidence)
@@ -273,11 +159,33 @@ crashcause-demo/oom-demo container app — oom_killed (high confidence)
     - Check node MemoryPressure conditions if this recurs across pods
 ```
 
-<details>
-<summary><b><code>--output json</code> shape</b></summary>
+| Exit code | Meaning |
+|---|---|
+| `0` | Diagnosed: at least one container's crash was classified and reported. |
+| `1` | Error: bad flags, unreachable API server, pod or container not found. |
+| `2` | Nothing to diagnose: the pod exists but isn't crashing. |
 
-`--output json` emits one `Report` document per invocation, with the field names as they
-appear in `internal/engine/types.go`'s `Diagnosis`:
+<details>
+<summary><b><code>inspect</code> flags</b></summary>
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `-c, --container` | (unset) | Restrict the diagnosis to one container. By default every container that warrants diagnosis is reported. |
+| `--output` | `human` | `human` or `json`. |
+| `--previous-lines` | `60` | Lines to fetch from the previous container's log tail. |
+| `--init-stuck-threshold` | `10m` | How long an init container may run before it's reported as `init_container_stuck`. |
+| `--verbose` | `false` | Report every rule that matched, not just the primary diagnosis. |
+| `--ai` | `false` | Enable the optional AI summary (see [AI summaries](#ai-summaries-optional-off-by-default)). |
+| `-n, --namespace`, `--kubeconfig`, `--context`, ... | | Standard `k8s.io/cli-runtime` kubeconfig flags, as in kubectl. |
+| `--log-level` (root, persistent) | `info` | `debug\|info\|warn\|error`. |
+
+</details>
+
+<details>
+<summary><b>The same diagnosis as JSON</b></summary>
+
+`--output json` emits one `Report` document per invocation, with the field names of `Diagnosis`
+in `internal/engine/types.go`:
 
 ```json
 {
@@ -308,31 +216,33 @@ appear in `internal/engine/types.go`'s `Diagnosis`:
 }
 ```
 
-`ai_summary` is always present in the JSON shape (nullable) and is only non-null when
-`--ai` was passed and the provider call succeeded. A healthy pod (`exit 2`) still emits a
-well-formed document with `"diagnoses": []` in JSON mode, so `jq '.diagnoses | length'`
-never breaks on a healthy pod.
+`ai_summary` is always present and is non-null only when `--ai` was passed and the provider call
+succeeded. A healthy pod (exit `2`) still gets a well-formed document with `"diagnoses": []`, so
+`jq '.diagnoses | length'` never breaks on one.
 
 </details>
 
-## `watch` mode + sinks
+## Watch the whole cluster
 
 ```sh
 crashcause watch [flags]
 ```
 
-Every diagnosis goes to stdout as one JSON object per line — always on, so any team
-already scraping container stdout (promtail, vector, fluent-bit) gets structured
-crash-cause data with no direct-push configuration at all. `--metrics-addr` adds a
-Prometheus endpoint with exactly two intentionally low-cardinality metrics
-(`crashcause_diagnoses_total{namespace, owner_kind, owner_name, cause}` and
-`crashcause_log_fetches_skipped_total`), and `--loki-url` adds a direct Loki push.
-Emission for the log-style sinks is deduplicated per workload; the Prometheus counter
-increments on every observed crash regardless. The full sink reference — cardinality
-discipline, Loki auth and backpressure, and the dedup model — lives in
-[`docs/sinks.md`](./docs/sinks.md). Example Grafana dashboard and Prometheus alert
-rules: [`examples/grafana-dashboard.json`](./examples/grafana-dashboard.json),
-[`examples/prometheus-alerts.yaml`](./examples/prometheus-alerts.yaml).
+Every diagnosis goes to stdout as one JSON object per line. That sink is always on, so a cluster
+that already ships container stdout (promtail, vector, fluent-bit) gets structured crash causes
+with nothing else to configure.
+
+- `--metrics-addr` serves two deliberately low-cardinality Prometheus metrics:
+  `crashcause_diagnoses_total{namespace, owner_kind, owner_name, cause}` and
+  `crashcause_log_fetches_skipped_total`.
+- `--loki-url` pushes diagnoses to Loki directly.
+- Log-style output is deduplicated per workload, while the Prometheus counter still counts every
+  observed crash.
+
+The full sink reference (cardinality, Loki auth and backpressure, the dedup model) is in
+[`docs/sinks.md`](./docs/sinks.md). To start from something working, use the example
+[Grafana dashboard](./examples/grafana-dashboard.json) and
+[Prometheus alert rules](./examples/prometheus-alerts.yaml).
 
 <details>
 <summary><b><code>watch</code> flags</b></summary>
@@ -348,99 +258,156 @@ rules: [`examples/grafana-dashboard.json`](./examples/grafana-dashboard.json),
 | `--collect-logs` | `true` | Whether to fetch previous-container logs at all. |
 | `--log-namespaces` | (all) | Namespaces log collection is allowed in. |
 | `--log-rate-limit` | `10` | Max pod-log fetches per minute (client-side token bucket). |
-| `--previous-lines` | `60` | Log tail length passed to the engine and (if enabled) the AI layer. |
+| `--previous-lines` | `60` | Log tail length passed to the engine and, if enabled, the AI layer. |
 | `--init-stuck-threshold` | `10m` | Same meaning as in `inspect`. |
 | `--leader-elect` | `false` | Enable leader election so only one replica is active. |
 | `--leader-election-namespace` | `$POD_NAMESPACE`, else `default` | Namespace holding the leader-election Lease. |
 | `--leader-election-id` | `crashcause` | Name of the leader-election Lease. |
 | `--health-addr` | `:8081` | Address serving `/healthz` and `/readyz`. |
-| `--ai-namespaces` | (empty: AI off everywhere) | Namespace allowlist for AI summarization. Empty keeps AI inert in every namespace, even with `--ai` set; pass `"*"` to opt the whole cluster in. |
+| `--ai-namespaces` | (empty: AI off everywhere) | Namespace allowlist for AI summaries. Empty keeps AI inert in every namespace, even with `--ai` set; pass `"*"` to opt the whole cluster in. |
 | `--ai`, `--ai-provider`, `--ai-url`, `--ai-model`, `--ai-timeout`, `--ai-redact`, `--ai-redact-ips`, `--ai-redact-extra` | see [`docs/ai-layer.md`](./docs/ai-layer.md) | Shared AI flags, identical to `inspect`. |
 
 </details>
 
-## AI layer (optional, default off)
+## Cause codes
 
-`--ai` / `ai.enabled` turn on an optional layer that sends the (already-truncated) log
-tail and diagnosis evidence to an LLM for a short natural-language summary — useful
-mainly when the rule engine lands on `app_exit_nonzero` or `unknown`, where the "cause"
-is an application bug the rules can't interpret further. Three properties are
-load-bearing: it is **off by default**; the per-namespace allowlist (`--ai-namespaces` /
-`ai.namespaces`) is **fail-closed** — with `--ai` set but the allowlist empty, nothing is
-sent anywhere; and redaction (`--ai-redact`, default on) is **best-effort pattern
-matching, not a guarantee** — do not enable AI on workloads whose logs may contain
-secrets you cannot afford to send to a third-party provider. Providers are `anthropic`,
-`openai`, and keyless self-hosted `ollama` (the recommended path for privacy-sensitive
-environments). Key handling, exactly what is and is never sent, redaction coverage, and
-failure behavior: [`docs/ai-layer.md`](./docs/ai-layer.md).
-
-## Security & RBAC
-
-Every privilege `crashcause` asks for is individually severable — you can turn each one
-off and see, precisely, what capability you lose. `crashcause inspect` needs none of
-this: it runs with the invoking user's own kubeconfig credentials against a single pod,
-so the RBAC discussion applies only to `watch`.
+Every diagnosis carries one of 18 stable, snake_case cause codes, defined in
+`internal/engine/types.go`. They are part of the external contract: once released, a code's
+meaning does not change.
 
 <details>
-<summary><b>Permission-by-permission table</b></summary>
+<summary><b>All 18 cause codes and what triggers each</b></summary>
 
-| Permission | Why it's needed | How to remove it / what degrades |
-|---|---|---|
-| `pods` get/list/watch | Core input: container statuses, restart counts, owner metadata. | Not removable without disabling `watch` entirely — this is the minimum the controller needs to exist. |
-| `events` get/list/watch | Probe failures, scheduling failures, image pull failures, volume mount failures all surface as events. | Same as above — required for most cause codes. |
-| `nodes` get/list/watch | Node conditions (`MemoryPressure`, `DiskPressure`) as context for `evicted`/`sigkill_unattributed`. | Not independently toggleable today; absence just means node-condition evidence is empty. |
-| `pods/log` get | Previous-container log tail, used by log-pattern hints and the AI layer. | Set `logCollection.enabled=false`. The chart **omits the RBAC rule entirely** in that case — the controller provably cannot read logs, not merely configured not to. `app_exit_nonzero` still fires from exit codes and events; it just loses log-pattern hints, and the AI layer becomes inert (nothing to send). |
-| `coordination.k8s.io` `leases` create/get/update | Leader election, so only one replica is active when running more than one. | Only requested when `leaderElection.enabled=true` (required if `replicas > 1`); otherwise the Role isn't created at all. Granted as a **namespaced Role**, not another cluster-wide grant: the chart sets `POD_NAMESPACE` via the downward API and passes `--leader-election-id=<release fullname>`, so the Lease always lands in the release's own namespace. |
+| Cause code | Meaning |
+|---|---|
+| `oom_killed` | The container's last termination reason was exactly `OOMKilled` (kernel cgroup attribution). Never inferred from a bare exit 137, because usage data can't be recovered from the Kubernetes API after the fact. |
+| `sigkill_unattributed` | Exit code 137 (SIGKILL) **without** `reason=OOMKilled` and **without** the pod being deleted. Suspects: a node-level OOM kill that wasn't cgroup-attributed, or an external SIGKILL. |
+| `evicted` | Pod status reason is `Evicted`; the eviction message is parsed for the pressured resource (memory, disk or pids). |
+| `probe_liveness_failure` | A `Killing` event plus `Unhealthy` (liveness) events: the liveness probe killed the container. |
+| `probe_startup_failure` | `Unhealthy` (startup) events plus a restart; flags a too-tight `failureThreshold` x `periodSeconds` against observed startup time when derivable. |
+| `image_pull_auth` | `ErrImagePull` or `ImagePullBackOff` with a message matching an authorization failure (401/403, "pull access denied"). |
+| `image_pull_not_found` | Image pull failure with a message matching "not found" or "manifest unknown". |
+| `image_pull_other` | Any other pull failure: timeout, TLS error, registry quota, and so on. |
+| `security_context_violation` | `CreateContainerConfigError` where the kubelet message shows a securityContext rejection, such as `runAsNonRoot: true` against an image that runs as root or declares a non-numeric user. The image pulled fine; a pre-start config check refused the container, so it never started. |
+| `config_missing_reference` | `CreateContainerConfigError` because a referenced ConfigMap, Secret or key doesn't exist; the message names which one. securityContext rejections are reported as `security_context_violation` instead. |
+| `volume_mount_failure` | `FailedMount` or `FailedAttachVolume` events. |
+| `init_container_failure` | An init container terminated non-zero; the failure is re-classified using only the rules that apply to init containers. |
+| `init_container_stuck` | An init container has been `Running` for longer than `--init-stuck-threshold` (default 10m) without completing, or `activeDeadlineSeconds` was exceeded. Not a crash: a pod stuck at `Init:N/M`. |
+| `unschedulable` | Pod is `Pending` with `FailedScheduling` events; the message is parsed to tell insufficient resources, node-affinity mismatch, untolerated taints and volume zone conflicts apart. Needs no logs and no extra RBAC. |
+| `app_exit_nonzero` | A clean application-level crash: exit code 1, 2 or another non-zero code with no Kubernetes-side cause. Log-tail patterns (`panic:`, `Fatal`, `ECONNREFUSED`, `OutOfMemoryError`, `MODULE_NOT_FOUND`, segfault/exit 139, and so on) refine the explanation. The main input to the optional AI layer. |
+| `sigkill_after_grace` | Exit 137 **on a pod with a `deletionTimestamp` set**: the app did not stop on `SIGTERM` before its termination grace period ran out. Application-only, high confidence. |
+| `completed_restart_loop` | Exit code 0 with `restartPolicy: Always` on what looks like a run-to-completion workload, so it keeps "succeeding" and restarting forever. |
+| `unknown` | Nothing matched confidently. The evidence collected so far is still reported; the AI layer, if enabled, is the suggested next step. |
 
-Nothing in the RBAC surface is a write verb against workload state, and nothing is
-secret-shaped: the chart never creates or reads arbitrary Secrets — the one Secret
-reference it accepts (`ai.existingSecret`) is a name you provide, mounted as an
-environment variable, never inspected or logged by the chart itself.
-
-Pod-log fetches in `watch` mode are additionally protected by a client-side token-bucket
-rate limiter (`--log-rate-limit`, default 10/minute) so a crash-storm across many pods
-cannot turn the controller into an unintentional API-server DoS. Fetches beyond budget are
-skipped, counted in `crashcause_log_fetches_skipped_total`, and diagnosis proceeds without
-log evidence rather than blocking or failing.
+Exit 143 during a rolling deploy, scale-down or deletion is **normal pod lifecycle**: the pod has a
+`deletionTimestamp`, or its owner is mid rolling update. It is deliberately **not reported**, or
+every deploy would read as a stream of crashes. Exit 143 outside any deletion context, where
+something inside the container sent itself a `SIGTERM`, becomes low-confidence
+`app_exit_nonzero` evidence rather than a cause of its own.
 
 </details>
 
-Full permission-by-permission reference: [`charts/crashcause/README.md`](./charts/crashcause/README.md).
+## AI summaries (optional, off by default)
 
-## Exit codes
+`--ai`, or `ai.enabled` in the chart, sends the already-truncated log tail and the diagnosis
+evidence to an LLM for a short plain-language summary. It is only worth it when the rules land on
+`app_exit_nonzero` or `unknown`, where the cause is an application bug the rules can't read any
+further.
 
-| Code | Meaning | Applies to |
+- **Off by default.**
+- **Fail-closed per namespace.** In `watch`, the allowlist (`--ai-namespaces`, `ai.namespaces`)
+  starts empty, and with `--ai` set but no namespace listed, nothing is sent anywhere.
+- **Redaction is best effort.** `--ai-redact` (on by default) is pattern matching, not a guarantee.
+  Don't enable AI for workloads whose logs may hold secrets you can't afford to send to a provider.
+- **Your own key, or no key.** Providers are `anthropic` (the default), `openai`, and keyless,
+  self-hosted `ollama`, the recommended choice where privacy matters. A key is read only from
+  `CRASHCAUSE_AI_API_KEY`, never from a flag.
+
+Key handling, exactly what is and is never sent, redaction coverage and failure behavior are in
+[`docs/ai-layer.md`](./docs/ai-layer.md).
+
+## Security and RBAC
+
+Every privilege `watch` asks for can be removed on its own, and each one's removal costs a
+specific, documented capability. `crashcause inspect` needs none of it: it runs against one pod
+with your own kubeconfig credentials.
+
+<details>
+<summary><b>Each permission, why it's needed, and what removing it costs</b></summary>
+
+| Permission | Why it's needed | How to remove it, and what degrades |
 |---|---|---|
-| `0` | Diagnosed: at least one container's crash was classified and reported. | `inspect` |
-| `1` | Error: bad flags, unreachable API server, pod/container not found, and similar failures. | `inspect` |
-| `2` | Nothing to diagnose: the pod exists and was inspected successfully, but it isn't crashing. | `inspect` |
+| `pods` get/list/watch | Core input: container statuses, restart counts, owner metadata. | Not removable without disabling `watch` entirely; this is the minimum the controller needs. |
+| `events` get/list/watch | Probe, scheduling, image pull and volume mount failures all surface as events. | Same as above: required for most cause codes. |
+| `nodes` get/list/watch | Node conditions (`MemoryPressure`, `DiskPressure`) as context for `evicted` and `sigkill_unattributed`. | Not independently toggleable today; without it, node-condition evidence is simply empty. |
+| `pods/log` get | Previous-container log tail, used by log-pattern hints and the AI layer. | Set `logCollection.enabled=false`. The chart then **omits the RBAC rule entirely**, so the controller provably cannot read logs rather than merely being configured not to. `app_exit_nonzero` still fires from exit codes and events but loses log-pattern hints, and the AI layer has nothing to send. |
+| `coordination.k8s.io` `leases` create/get/update | Leader election, so only one replica is active when running more than one. | Only requested when `leaderElection.enabled=true` (required if `replicas > 1`); otherwise the Role isn't created at all. It is a **namespaced Role**, not another cluster-wide grant: the chart sets `POD_NAMESPACE` through the downward API and passes `--leader-election-id=<release fullname>`, so the Lease always lives in the release's own namespace. |
 
-## Roadmap / not in v1
+Nothing in the RBAC surface can write to workload state, and nothing reads Secrets. The chart
+never creates or reads arbitrary Secrets: the one Secret it accepts (`ai.existingSecret`) is a
+name you provide, mounted as an environment variable and never inspected or logged by the chart.
 
-Deliberately out of scope for the first release:
+In `watch`, pod-log fetches also go through a client-side token bucket (`--log-rate-limit`,
+default 10 per minute), so a crash storm across many pods can't turn the controller into an
+accidental denial of service against the API server. Fetches over budget are skipped and counted
+in `crashcause_log_fetches_skipped_total`, and the diagnosis goes ahead without log evidence
+instead of blocking or failing.
 
-- Cloud-provider enrichment (GKE/EKS/AKS-specific signals, cloud monitoring correlation)
-- Stuck-state forensics beyond `unschedulable` / `init_container_stuck`: Terminating-forever
-  / finalizer analysis, `ContainerCreating` stuck for reasons other than a volume mount
-- Auto-remediation of any kind — this tool diagnoses, it never acts on a cluster
-- Historical storage or a database — the sinks (stdout/Prometheus/Loki) *are* the storage;
-  `crashcause` itself is stateless
-- Multi-cluster federation
-- A web UI
+</details>
+
+The full permission reference is in [`charts/crashcause/README.md`](./charts/crashcause/README.md).
+
+## Try it on kind
+
+[`examples/kind-demo/`](./examples/kind-demo/README.md) has a kind cluster config and one manifest
+per scenario: an OOM kill, a bad liveness probe, a missing Secret reference, a bad image tag, an
+unschedulable resource request and a stuck init container.
+
+```sh
+kind create cluster --config examples/kind-demo/kind-config.yaml
+go build -o bin/crashcause ./cmd/crashcause
+
+kubectl apply -f examples/kind-demo/namespace.yaml
+kubectl apply -f examples/kind-demo/oom.yaml -f examples/kind-demo/bad-probe.yaml \
+  -f examples/kind-demo/missing-secret.yaml -f examples/kind-demo/bad-image.yaml \
+  -f examples/kind-demo/unschedulable.yaml -f examples/kind-demo/stuck-init.yaml
+
+./bin/crashcause inspect oom-demo -n crashcause-demo
+```
+
+The demo README maps each manifest to its cause code, says how long each scenario takes to
+appear, and covers cleanup.
+
+## Out of scope for v1
+
+- Cloud-provider enrichment: GKE, EKS or AKS signals, or cloud monitoring correlation.
+- Stuck states beyond `unschedulable` and `init_container_stuck`, such as pods stuck in
+  Terminating on a finalizer, or in `ContainerCreating` for a reason other than a volume mount.
+- Remediation of any kind. crashcause diagnoses; it never changes anything in a cluster.
+- Historical storage. The sinks (stdout, Prometheus, Loki) are the storage, and crashcause itself
+  is stateless.
+- Multi-cluster federation.
+- A web UI.
 
 ## Development
 
-Prerequisites to build: **Go 1.26** (pinned as `toolchain go1.26.8` in
-`go.mod`; any Go ≥ 1.21 auto-downloads it).
-
-Prerequisites for the full check loop (not required just to build): **golangci-lint v2**,
-**shellcheck**, **zizmor**, **helm**, **kind**.
+Building needs **Go 1.26**, pinned as `toolchain go1.26.8` in `go.mod`; any Go 1.21 or newer
+downloads it automatically. The full check loop also needs **golangci-lint v2**, **shellcheck**,
+**zizmor**, **helm** and **kind**.
 
 ```sh
 make fmt lint test race cover build e2e helm-lint check
 ```
 
-`make check` mirrors what CI runs — if it's green locally, CI should be green too.
+`make check` runs what CI gates on, so green locally should mean green in CI.
+
+## Documentation
+
+- [Sinks](docs/sinks.md): Prometheus, Loki and stdout, cardinality, and the dedup model
+- [AI layer](docs/ai-layer.md): providers, key handling, what is sent, and redaction
+- [Helm chart](charts/crashcause/README.md): every value, RBAC, and scaling
+- [kind demo](examples/kind-demo/README.md): one manifest per cause code
+- [Changelog](CHANGELOG.md): what changed in each release
 
 ## License
 
