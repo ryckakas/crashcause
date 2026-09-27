@@ -1,6 +1,6 @@
 # Sinks and the dedup model
 
-The deep-dive behind the README's [`watch` mode + sinks](../README.md#watch-mode--sinks)
+The deep-dive behind the README's [Watch the whole cluster](../README.md#watch-the-whole-cluster)
 summary: what each sink emits, the cardinality rules that keep them safe to run for
 months, and how deduplication decides when a diagnosis is worth another line.
 
