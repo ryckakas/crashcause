@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/ryckakas/crashcause/internal/engine"
@@ -42,134 +43,150 @@ func TestForPodCrashedAppContainer(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d inputs, want 1", len(got))
 	}
-	in := got[0]
+	f := crashedAppInputs{in: got[0], cs: cs}
 
-	t.Run("identity", func(t *testing.T) {
-		if in.Pod != testPodName || in.Namespace != testNamespace || in.Container != testContainer {
-			t.Errorf("identity = %s/%s/%s", in.Namespace, in.Pod, in.Container)
-		}
-		if in.Kind != engine.KindApp {
-			t.Errorf("Kind = %q, want %q", in.Kind, engine.KindApp)
-		}
-		if in.Image != testImage {
-			t.Errorf("Image = %q, want %q", in.Image, testImage)
-		}
-		if in.RestartCount != 5 {
-			t.Errorf("RestartCount = %d, want 5", in.RestartCount)
-		}
-		if in.QOSClass != string(corev1.PodQOSBurstable) {
-			t.Errorf("QOSClass = %q", in.QOSClass)
-		}
-		if in.RestartPolicy != string(corev1.RestartPolicyAlways) {
-			t.Errorf("RestartPolicy = %q", in.RestartPolicy)
-		}
-		if in.PodPhase != string(corev1.PodRunning) {
-			t.Errorf("PodPhase = %q", in.PodPhase)
-		}
-		if !in.Now.Equal(fixedNow) {
-			t.Errorf("Now = %v, want %v", in.Now, fixedNow)
-		}
-		if in.InitStuckThreshold != defaultInitStuckThreshold {
-			t.Errorf("InitStuckThreshold = %v", in.InitStuckThreshold)
-		}
-		if in.Deleting || in.OwnerRolling || in.ActiveDeadlineExceeded {
-			t.Errorf("unexpected lifecycle flags: %+v", in)
-		}
-	})
+	t.Run("identity", f.identity)
+	t.Run("last termination", f.lastTermination)
+	t.Run("resources and probes", f.resourcesAndProbes)
+	t.Run("events sorted ascending and filtered", f.eventsSortedAndFiltered)
+	t.Run("previous log fetch", f.previousLogFetch)
+}
 
-	t.Run("last termination", func(t *testing.T) {
-		lt := in.LastTermination
-		if !lt.Present {
-			t.Fatal("LastTermination.Present = false")
-		}
-		if lt.ExitCode != 137 || lt.Signal != 9 {
-			t.Errorf("exit/signal = %d/%d, want 137/9", lt.ExitCode, lt.Signal)
-		}
-		if lt.Reason != "OOMKilled" || lt.Message != "container was killed" {
-			t.Errorf("reason/message = %q/%q", lt.Reason, lt.Message)
-		}
-		if want := fixedNow.Add(-30 * time.Minute); !lt.StartedAt.Equal(want) {
-			t.Errorf("StartedAt = %v, want %v", lt.StartedAt, want)
-		}
-		if want := fixedNow.Add(-5 * time.Minute); !lt.FinishedAt.Equal(want) {
-			t.Errorf("FinishedAt = %v, want %v", lt.FinishedAt, want)
-		}
-		if in.CurrentTermination.Present {
-			t.Error("CurrentTermination.Present = true, want false")
-		}
-		if !in.Waiting.Present || in.Waiting.Reason != "CrashLoopBackOff" {
-			t.Errorf("Waiting = %+v", in.Waiting)
-		}
-		if in.Running.Present || in.RunningDuration != 0 {
-			t.Errorf("Running = %+v, duration %v", in.Running, in.RunningDuration)
-		}
-	})
+type crashedAppInputs struct {
+	in engine.Inputs
+	cs *fake.Clientset
+}
 
-	t.Run("resources and probes", func(t *testing.T) {
-		if got, want := in.Requests["memory"], "128Mi"; got != want {
-			t.Errorf("Requests[memory] = %q, want %q", got, want)
-		}
-		if got, want := in.Requests["cpu"], "100m"; got != want {
-			t.Errorf("Requests[cpu] = %q, want %q", got, want)
-		}
-		if got, want := in.Limits["memory"], "256Mi"; got != want {
-			t.Errorf("Limits[memory] = %q, want %q", got, want)
-		}
-		want := engine.ProbeSpec{
-			Defined:             true,
-			FailureThreshold:    7,
-			PeriodSeconds:       10,
-			InitialDelaySeconds: 15,
-			TimeoutSeconds:      1,
-		}
-		if in.Liveness != want {
-			t.Errorf("Liveness = %+v, want %+v", in.Liveness, want)
-		}
-		if in.Readiness.Defined || in.Startup.Defined {
-			t.Errorf("undefined probes reported as defined: %+v %+v", in.Readiness, in.Startup)
-		}
-	})
+func (f crashedAppInputs) identity(t *testing.T) {
+	in := f.in
+	if in.Pod != testPodName || in.Namespace != testNamespace || in.Container != testContainer {
+		t.Errorf("identity = %s/%s/%s", in.Namespace, in.Pod, in.Container)
+	}
+	if in.Kind != engine.KindApp {
+		t.Errorf("Kind = %q, want %q", in.Kind, engine.KindApp)
+	}
+	if in.Image != testImage {
+		t.Errorf("Image = %q, want %q", in.Image, testImage)
+	}
+	if in.RestartCount != 5 {
+		t.Errorf("RestartCount = %d, want 5", in.RestartCount)
+	}
+	if in.QOSClass != string(corev1.PodQOSBurstable) {
+		t.Errorf("QOSClass = %q", in.QOSClass)
+	}
+	if in.RestartPolicy != string(corev1.RestartPolicyAlways) {
+		t.Errorf("RestartPolicy = %q", in.RestartPolicy)
+	}
+	if in.PodPhase != string(corev1.PodRunning) {
+		t.Errorf("PodPhase = %q", in.PodPhase)
+	}
+	if !in.Now.Equal(fixedNow) {
+		t.Errorf("Now = %v, want %v", in.Now, fixedNow)
+	}
+	if in.InitStuckThreshold != defaultInitStuckThreshold {
+		t.Errorf("InitStuckThreshold = %v", in.InitStuckThreshold)
+	}
+	if in.Deleting || in.OwnerRolling || in.ActiveDeadlineExceeded {
+		t.Errorf("unexpected lifecycle flags: %+v", in)
+	}
+}
 
-	t.Run("events sorted ascending and filtered", func(t *testing.T) {
-		if len(in.Events) != 2 {
-			t.Fatalf("got %d events, want 2: %+v", len(in.Events), in.Events)
-		}
-		if in.Events[0].Reason != "Unhealthy" || in.Events[1].Reason != "BackOff" {
-			t.Errorf("events not sorted ascending by LastSeen: %+v", in.Events)
-		}
-		if in.Events[0].LastSeen.After(in.Events[1].LastSeen) {
-			t.Errorf("LastSeen out of order: %v then %v", in.Events[0].LastSeen, in.Events[1].LastSeen)
-		}
-		if in.Events[1].Count != 12 || in.Events[1].Type != corev1.EventTypeWarning {
-			t.Errorf("event fields lost: %+v", in.Events[1])
-		}
-		if in.Events[0].FirstSeen.IsZero() {
-			t.Error("FirstSeen not populated")
-		}
-	})
+func (f crashedAppInputs) lastTermination(t *testing.T) {
+	in := f.in
+	lt := in.LastTermination
+	if !lt.Present {
+		t.Fatal("LastTermination.Present = false")
+	}
+	if lt.ExitCode != 137 || lt.Signal != 9 {
+		t.Errorf("exit/signal = %d/%d, want 137/9", lt.ExitCode, lt.Signal)
+	}
+	if lt.Reason != "OOMKilled" || lt.Message != "container was killed" {
+		t.Errorf("reason/message = %q/%q", lt.Reason, lt.Message)
+	}
+	if want := fixedNow.Add(-30 * time.Minute); !lt.StartedAt.Equal(want) {
+		t.Errorf("StartedAt = %v, want %v", lt.StartedAt, want)
+	}
+	if want := fixedNow.Add(-5 * time.Minute); !lt.FinishedAt.Equal(want) {
+		t.Errorf("FinishedAt = %v, want %v", lt.FinishedAt, want)
+	}
+	if in.CurrentTermination.Present {
+		t.Error("CurrentTermination.Present = true, want false")
+	}
+	if !in.Waiting.Present || in.Waiting.Reason != "CrashLoopBackOff" {
+		t.Errorf("Waiting = %+v", in.Waiting)
+	}
+	if in.Running.Present || in.RunningDuration != 0 {
+		t.Errorf("Running = %+v, duration %v", in.Running, in.RunningDuration)
+	}
+}
 
-	t.Run("previous log fetch", func(t *testing.T) {
-		if in.LogsUnavailable {
-			t.Error("LogsUnavailable = true, want false")
-		}
-		// Content is the fake's constant body, so only plumbing is asserted.
-		if len(in.LogTail) == 0 {
-			t.Error("LogTail is empty, want the fake's body")
-		}
-		reqs := logActions(t, cs)
-		if len(reqs) != 1 {
-			t.Fatalf("got %d log actions, want 1", len(reqs))
-		}
-		if !reqs[0].Previous {
-			t.Error("Previous = false, want true (lastState.terminated present)")
-		}
-		if reqs[0].TailLines == nil || *reqs[0].TailLines != defaultPreviousLogLines {
-			t.Errorf("TailLines = %v, want %d", reqs[0].TailLines, defaultPreviousLogLines)
-		}
-		if reqs[0].Container != testContainer {
-			t.Errorf("Container = %q, want %q", reqs[0].Container, testContainer)
-		}
-	})
+func (f crashedAppInputs) resourcesAndProbes(t *testing.T) {
+	in := f.in
+	if got, want := in.Requests["memory"], "128Mi"; got != want {
+		t.Errorf("Requests[memory] = %q, want %q", got, want)
+	}
+	if got, want := in.Requests["cpu"], "100m"; got != want {
+		t.Errorf("Requests[cpu] = %q, want %q", got, want)
+	}
+	if got, want := in.Limits["memory"], "256Mi"; got != want {
+		t.Errorf("Limits[memory] = %q, want %q", got, want)
+	}
+	want := engine.ProbeSpec{
+		Defined:             true,
+		FailureThreshold:    7,
+		PeriodSeconds:       10,
+		InitialDelaySeconds: 15,
+		TimeoutSeconds:      1,
+	}
+	if in.Liveness != want {
+		t.Errorf("Liveness = %+v, want %+v", in.Liveness, want)
+	}
+	if in.Readiness.Defined || in.Startup.Defined {
+		t.Errorf("undefined probes reported as defined: %+v %+v", in.Readiness, in.Startup)
+	}
+}
+
+func (f crashedAppInputs) eventsSortedAndFiltered(t *testing.T) {
+	in := f.in
+	if len(in.Events) != 2 {
+		t.Fatalf("got %d events, want 2: %+v", len(in.Events), in.Events)
+	}
+	if in.Events[0].Reason != "Unhealthy" || in.Events[1].Reason != "BackOff" {
+		t.Errorf("events not sorted ascending by LastSeen: %+v", in.Events)
+	}
+	if in.Events[0].LastSeen.After(in.Events[1].LastSeen) {
+		t.Errorf("LastSeen out of order: %v then %v", in.Events[0].LastSeen, in.Events[1].LastSeen)
+	}
+	if in.Events[1].Count != 12 || in.Events[1].Type != corev1.EventTypeWarning {
+		t.Errorf("event fields lost: %+v", in.Events[1])
+	}
+	if in.Events[0].FirstSeen.IsZero() {
+		t.Error("FirstSeen not populated")
+	}
+}
+
+func (f crashedAppInputs) previousLogFetch(t *testing.T) {
+	in := f.in
+	if in.LogsUnavailable {
+		t.Error("LogsUnavailable = true, want false")
+	}
+	// Content is the fake's constant body, so only plumbing is asserted.
+	if len(in.LogTail) == 0 {
+		t.Error("LogTail is empty, want the fake's body")
+	}
+	reqs := logActions(t, f.cs)
+	if len(reqs) != 1 {
+		t.Fatalf("got %d log actions, want 1", len(reqs))
+	}
+	if !reqs[0].Previous {
+		t.Error("Previous = false, want true (lastState.terminated present)")
+	}
+	if reqs[0].TailLines == nil || *reqs[0].TailLines != defaultPreviousLogLines {
+		t.Errorf("TailLines = %v, want %d", reqs[0].TailLines, defaultPreviousLogLines)
+	}
+	if reqs[0].Container != testContainer {
+		t.Errorf("Container = %q, want %q", reqs[0].Container, testContainer)
+	}
 }
 
 func TestLogRateLimiterSkipsFetches(t *testing.T) {
