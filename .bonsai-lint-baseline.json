@@ -8,7 +8,6 @@
     "internal/collect/collector_test.go": {
       "TestContainerFilter": 24,
       "TestDeletingPod": 18,
-      "TestForPodCrashedAppContainer": 80,
       "TestInitContainerStuck": 22,
       "TestNodeConditions": 16,
       "TestOwnerResolution": 25
