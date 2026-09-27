@@ -378,13 +378,7 @@ var (
 // imagePullContext returns the most informative image-pull failure message
 // available, and whether an image-pull failure is present at all.
 func imagePullContext(in Inputs) (string, bool) {
-	waitingPull := in.Waiting.Present &&
-		(strings.EqualFold(in.Waiting.Reason, "ErrImagePull") ||
-			strings.EqualFold(in.Waiting.Reason, "ImagePullBackOff") ||
-			strings.EqualFold(in.Waiting.Reason, "ImageInspectError") ||
-			strings.EqualFold(in.Waiting.Reason, "RegistryUnavailable") ||
-			strings.EqualFold(in.Waiting.Reason, "SignatureValidationFailed") ||
-			strings.EqualFold(in.Waiting.Reason, "ErrImageNeverPull"))
+	waitingPull := in.Waiting.Present && isPullWaitingReason(in.Waiting.Reason)
 
 	// A failure-family waiting reason outside the pull set
 	// (CreateContainerConfigError, CrashLoopBackOff, ...) positively identifies
@@ -397,14 +391,30 @@ func imagePullContext(in Inputs) (string, bool) {
 	if in.Waiting.Present && !waitingPull && isProblemWaitingReason(in.Waiting.Reason) {
 		return "", false
 	}
+	if best := mostInformativePullMessage(pullFailureCandidates(in, waitingPull)); best != "" {
+		return best, true
+	}
+	if waitingPull {
+		return in.Waiting.Message, true
+	}
+	return "", false
+}
 
-	// The event message is normally far richer than the waiting message —
-	// but one pull failure produces several events ("Failed to pull image
-	// ...: not found", "Error: ErrImagePull", "Error: ImagePullBackOff")
-	// that often share a one-second-granularity timestamp, so the sort
-	// order between them is arbitrary. Taking the first match would let a
-	// bare "Error: ErrImagePull" shadow the message that actually carries
-	// the auth/not-found detail; pick the most informative candidate.
+var pullWaitingReasons = []string{
+	"ErrImagePull", "ImagePullBackOff", "ImageInspectError",
+	"RegistryUnavailable", "SignatureValidationFailed", "ErrImageNeverPull",
+}
+
+func isPullWaitingReason(reason string) bool {
+	for _, r := range pullWaitingReasons {
+		if strings.EqualFold(reason, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func pullFailureCandidates(in Inputs, waitingPull bool) []string {
 	var candidates []string
 	for _, e := range eventsByReason(in, "Failed", "FailedToPullImage", "ErrImagePull") {
 		if containsFold(e.Message, "pull") || containsFold(e.Message, "image") {
@@ -419,7 +429,17 @@ func imagePullContext(in Inputs) (string, bool) {
 	if waitingPull && in.Waiting.Message != "" {
 		candidates = append(candidates, in.Waiting.Message)
 	}
+	return candidates
+}
 
+// mostInformativePullMessage exists because the event message is normally far
+// richer than the waiting message, but one pull failure produces several
+// events ("Failed to pull image ...: not found", "Error: ErrImagePull",
+// "Error: ImagePullBackOff") that often share a one-second-granularity
+// timestamp, so the sort order between them is arbitrary. Taking the first
+// match would let a bare "Error: ErrImagePull" shadow the message that
+// actually carries the auth/not-found detail.
+func mostInformativePullMessage(candidates []string) string {
 	best, bestScore := "", -1
 	for _, msg := range candidates {
 		score := 0
@@ -433,13 +453,7 @@ func imagePullContext(in Inputs) (string, bool) {
 			best, bestScore = msg, score
 		}
 	}
-	if best != "" {
-		return best, true
-	}
-	if waitingPull {
-		return in.Waiting.Message, true
-	}
-	return "", false
+	return best
 }
 
 // imagePullEvidence builds the evidence lines shared by all three pull rules.
