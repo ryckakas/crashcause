@@ -42,14 +42,8 @@
     "internal/inspect/render_test.go": {
       "TestRunVerboseSecondaryMatches": 28
     },
-    "internal/sinks/loki.go": {
-      "lokiSink::run": 21
-    },
     "internal/sinks/loki_test.go": {
       "TestLokiHappyPathSinglePush": 27
-    },
-    "internal/watch/trigger.go": {
-      "containerWarrantsTrigger": 18
     }
   }
 }

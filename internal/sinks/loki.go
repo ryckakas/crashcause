@@ -356,59 +356,73 @@ func (s *lokiSink) Close(ctx context.Context) error {
 func (s *lokiSink) run(ctx context.Context) {
 	defer close(s.done)
 
-	pending := make([]lokiEntry, 0, s.batchSize)
+	b := newLokiBatch(s)
+	for {
+		select {
+		case e := <-s.ch:
+			b.add(ctx, e)
+		case <-b.timer.C:
+			b.armed = false
+			b.flush(ctx)
+		case <-s.quit:
+			b.drain(ctx, s.ch)
+			return
+		}
+	}
+}
 
+type lokiBatch struct {
+	sink    *lokiSink
+	pending []lokiEntry
+	timer   *time.Timer
+	armed   bool
+}
+
+func newLokiBatch(s *lokiSink) *lokiBatch {
 	timer := time.NewTimer(time.Hour)
 	if !timer.Stop() {
 		<-timer.C
 	}
-	armed := false
+	return &lokiBatch{sink: s, pending: make([]lokiEntry, 0, s.batchSize), timer: timer}
+}
 
-	disarm := func() {
-		if armed && !timer.Stop() {
-			select {
-			case <-timer.C:
-			default:
-			}
-		}
-		armed = false
+func (b *lokiBatch) add(ctx context.Context, e lokiEntry) {
+	b.pending = append(b.pending, e)
+	if len(b.pending) == 1 {
+		// The deadline runs from the FIRST pending entry, so a partially
+		// full batch is still delivered within BatchWait.
+		b.timer.Reset(b.sink.batchWait)
+		b.armed = true
 	}
+	if len(b.pending) >= b.sink.batchSize {
+		b.disarm()
+		b.flush(ctx)
+	}
+}
 
-	add := func(e lokiEntry) {
-		pending = append(pending, e)
-		if len(pending) == 1 {
-			// The deadline runs from the FIRST pending entry, so a partially
-			// full batch is still delivered within BatchWait.
-			timer.Reset(s.batchWait)
-			armed = true
-		}
-		if len(pending) >= s.batchSize {
-			disarm()
-			s.flush(ctx, pending)
-			pending = pending[:0]
+func (b *lokiBatch) disarm() {
+	if b.armed && !b.timer.Stop() {
+		select {
+		case <-b.timer.C:
+		default:
 		}
 	}
+	b.armed = false
+}
 
+func (b *lokiBatch) flush(ctx context.Context) {
+	b.sink.flush(ctx, b.pending)
+	b.pending = b.pending[:0]
+}
+
+func (b *lokiBatch) drain(ctx context.Context, ch <-chan lokiEntry) {
 	for {
 		select {
-		case e := <-s.ch:
-			add(e)
-		case <-timer.C:
-			armed = false
-			s.flush(ctx, pending)
-			pending = pending[:0]
-		case <-s.quit:
-			drained := false
-			for !drained {
-				select {
-				case e := <-s.ch:
-					add(e)
-				default:
-					drained = true
-				}
-			}
-			disarm()
-			s.flush(ctx, pending)
+		case e := <-ch:
+			b.add(ctx, e)
+		default:
+			b.disarm()
+			b.flush(ctx)
 			return
 		}
 	}

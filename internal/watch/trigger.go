@@ -119,21 +119,24 @@ func warrantsTrigger(pod *corev1.Pod, now time.Time, initStuckThreshold time.Dur
 
 func containerWarrantsTrigger(statuses []corev1.ContainerStatus, isInit bool, now time.Time, initStuckThreshold time.Duration) bool {
 	for i := range statuses {
-		st := &statuses[i]
-		if t := st.State.Terminated; t != nil && (t.ExitCode != 0 || st.RestartCount > 0) {
+		if statusWarrantsTrigger(&statuses[i], isInit, now, initStuckThreshold) {
 			return true
-		}
-		if t := st.LastTerminationState.Terminated; t != nil && (t.ExitCode != 0 || st.RestartCount > 0) {
-			return true
-		}
-		if w := st.State.Waiting; w != nil && waitingReasonsWarrantingDiagnosis[w.Reason] {
-			return true
-		}
-		if isInit && st.State.Running != nil {
-			if now.Sub(st.State.Running.StartedAt.Time) > initStuckThreshold {
-				return true
-			}
 		}
 	}
 	return false
+}
+
+func statusWarrantsTrigger(st *corev1.ContainerStatus, isInit bool, now time.Time, initStuckThreshold time.Duration) bool {
+	if terminationWarrantsTrigger(st.State.Terminated, st.RestartCount) ||
+		terminationWarrantsTrigger(st.LastTerminationState.Terminated, st.RestartCount) {
+		return true
+	}
+	if w := st.State.Waiting; w != nil && waitingReasonsWarrantingDiagnosis[w.Reason] {
+		return true
+	}
+	return isInit && st.State.Running != nil && now.Sub(st.State.Running.StartedAt.Time) > initStuckThreshold
+}
+
+func terminationWarrantsTrigger(t *corev1.ContainerStateTerminated, restartCount int32) bool {
+	return t != nil && (t.ExitCode != 0 || restartCount > 0)
 }
