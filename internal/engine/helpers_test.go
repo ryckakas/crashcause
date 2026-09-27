@@ -588,14 +588,7 @@ func TestHTNodePressureEvidence(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHTParseMissingReference(t *testing.T) {
-	tests := []struct {
-		name     string
-		msg      string
-		wantKind string
-		wantName string
-		wantKey  string
-		wantOK   bool
-	}{
+	tests := []missingReferenceCase{
 		{
 			name:     "missing secret",
 			msg:      `secret "db-credentials" not found`,
@@ -640,24 +633,35 @@ func TestHTParseMissingReference(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ref, ok := parseMissingReference(tc.msg)
-			if ok != tc.wantOK {
-				t.Fatalf("parseMissingReference(%q) ok = %v, want %v", tc.msg, ok, tc.wantOK)
-			}
-			if !tc.wantOK {
-				return
-			}
-			if ref.Kind != tc.wantKind {
-				t.Errorf("Kind = %q, want %q", ref.Kind, tc.wantKind)
-			}
-			if ref.Name != tc.wantName {
-				t.Errorf("Name = %q, want %q", ref.Name, tc.wantName)
-			}
-			if ref.Key != tc.wantKey {
-				t.Errorf("Key = %q, want %q", ref.Key, tc.wantKey)
-			}
-		})
+		t.Run(tc.name, tc.run)
+	}
+}
+
+type missingReferenceCase struct {
+	name     string
+	msg      string
+	wantKind string
+	wantName string
+	wantKey  string
+	wantOK   bool
+}
+
+func (tc missingReferenceCase) run(t *testing.T) {
+	ref, ok := parseMissingReference(tc.msg)
+	if ok != tc.wantOK {
+		t.Fatalf("parseMissingReference(%q) ok = %v, want %v", tc.msg, ok, tc.wantOK)
+	}
+	if !tc.wantOK {
+		return
+	}
+	if ref.Kind != tc.wantKind {
+		t.Errorf("Kind = %q, want %q", ref.Kind, tc.wantKind)
+	}
+	if ref.Name != tc.wantName {
+		t.Errorf("Name = %q, want %q", ref.Name, tc.wantName)
+	}
+	if ref.Key != tc.wantKey {
+		t.Errorf("Key = %q, want %q", ref.Key, tc.wantKey)
 	}
 }
 
@@ -697,11 +701,7 @@ func TestHTKubectlResource(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHTParseVolumeNames(t *testing.T) {
-	tests := []struct {
-		name string
-		msg  string
-		want []string
-	}{
+	tests := []volumeNamesCase{
 		{
 			name: "for volume form",
 			msg:  `MountVolume.SetUp failed for volume "data" : secret "creds" not found`,
@@ -729,24 +729,25 @@ func TestHTParseVolumeNames(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := parseVolumeNames(tc.msg)
-			if tc.want == nil {
-				if got != nil {
-					t.Fatalf("parseVolumeNames(%q) = %v, want nil", tc.msg, got)
-				}
-				return
-			}
-			if len(got) != len(tc.want) {
-				t.Fatalf("parseVolumeNames(%q) = %v, want %v", tc.msg, got, tc.want)
-			}
-			for i := range tc.want {
-				if got[i] != tc.want[i] {
-					t.Errorf("parseVolumeNames(%q)[%d] = %q, want %q", tc.msg, i, got[i], tc.want[i])
-				}
-			}
-		})
+		t.Run(tc.name, tc.run)
 	}
+}
+
+type volumeNamesCase struct {
+	name string
+	msg  string
+	want []string
+}
+
+func (tc volumeNamesCase) run(t *testing.T) {
+	got := parseVolumeNames(tc.msg)
+	if tc.want == nil {
+		if got != nil {
+			t.Fatalf("parseVolumeNames(%q) = %v, want nil", tc.msg, got)
+		}
+		return
+	}
+	htAssertStrings(t, fmt.Sprintf("parseVolumeNames(%q)", tc.msg), got, tc.want)
 }
 
 // ---------------------------------------------------------------------------
@@ -754,13 +755,7 @@ func TestHTParseVolumeNames(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHTParseSchedulingFailure(t *testing.T) {
-	tests := []struct {
-		name          string
-		msg           string
-		wantKind      string
-		wantResources []string
-		wantTaints    []string
-	}{
+	tests := []schedulingFailureCase{
 		{
 			name:          "insufficient cpu and memory",
 			msg:           "0/5 nodes are available: 3 Insufficient cpu, 2 Insufficient memory.",
@@ -800,32 +795,28 @@ func TestHTParseSchedulingFailure(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			sc := parseSchedulingFailure(tc.msg)
-			if sc.Kind != tc.wantKind {
-				t.Fatalf("parseSchedulingFailure(%q).Kind = %q, want %q", tc.msg, sc.Kind, tc.wantKind)
-			}
-			if tc.wantResources != nil {
-				if len(sc.Resources) != len(tc.wantResources) {
-					t.Fatalf("Resources = %v, want %v", sc.Resources, tc.wantResources)
-				}
-				for i := range tc.wantResources {
-					if sc.Resources[i] != tc.wantResources[i] {
-						t.Errorf("Resources[%d] = %q, want %q", i, sc.Resources[i], tc.wantResources[i])
-					}
-				}
-			}
-			if tc.wantTaints != nil {
-				if len(sc.Taints) != len(tc.wantTaints) {
-					t.Fatalf("Taints = %v, want %v", sc.Taints, tc.wantTaints)
-				}
-				for i := range tc.wantTaints {
-					if sc.Taints[i] != tc.wantTaints[i] {
-						t.Errorf("Taints[%d] = %q, want %q", i, sc.Taints[i], tc.wantTaints[i])
-					}
-				}
-			}
-		})
+		t.Run(tc.name, tc.run)
+	}
+}
+
+type schedulingFailureCase struct {
+	name          string
+	msg           string
+	wantKind      string
+	wantResources []string
+	wantTaints    []string
+}
+
+func (tc schedulingFailureCase) run(t *testing.T) {
+	sc := parseSchedulingFailure(tc.msg)
+	if sc.Kind != tc.wantKind {
+		t.Fatalf("parseSchedulingFailure(%q).Kind = %q, want %q", tc.msg, sc.Kind, tc.wantKind)
+	}
+	if tc.wantResources != nil {
+		htAssertStrings(t, "Resources", sc.Resources, tc.wantResources)
+	}
+	if tc.wantTaints != nil {
+		htAssertStrings(t, "Taints", sc.Taints, tc.wantTaints)
 	}
 }
 
@@ -874,58 +865,67 @@ func TestHTLogPatternsEachNeedleMatches(t *testing.T) {
 }
 
 func TestHTScanLogTailCaseSensitivity(t *testing.T) {
-	t.Run("lowercase panic: does not match (case sensitive)", func(t *testing.T) {
-		hints := scanLogTail([]string{"this is not a match: PANIC: something"})
-		for _, h := range hints {
-			if h.Label == "go panic" {
-				t.Errorf("lowercase-vs-case PANIC: unexpectedly matched go panic pattern: %+v", h)
-			}
+	tests := []logCaseSensitivityCase{
+		{
+			name:    "lowercase panic: does not match (case sensitive)",
+			line:    "this is not a match: PANIC: something",
+			label:   "go panic",
+			failure: "lowercase-vs-case PANIC: unexpectedly matched go panic pattern",
+		},
+		{
+			name:    "uppercase panic: does match",
+			line:    "panic: runtime error",
+			label:   "go panic",
+			match:   true,
+			failure: "exact-case 'panic:' should match the go panic pattern",
+		},
+		{
+			name:    "lowercase fatal alone does not match fatal pattern",
+			line:    "this fatal error was lowercase only",
+			label:   "fatal log line",
+			failure: "lowercase 'fatal' unexpectedly matched the case-sensitive fatal pattern",
+		},
+		{
+			name:    "FATAL uppercase matches fatal pattern",
+			line:    "FATAL: could not connect",
+			label:   "fatal log line",
+			match:   true,
+			failure: "uppercase 'FATAL' should match the fatal log line pattern",
+		},
+		{
+			name:    "Fatal capitalized matches fatal pattern",
+			line:    "Fatal error occurred during startup",
+			label:   "fatal log line",
+			match:   true,
+			failure: "capitalized 'Fatal' should match the fatal log line pattern",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+type logCaseSensitivityCase struct {
+	name    string
+	line    string
+	label   string
+	match   bool
+	failure string
+}
+
+func (tc logCaseSensitivityCase) run(t *testing.T) {
+	hints := scanLogTail([]string{tc.line})
+	if tc.match {
+		if !hasHint(hints, tc.label) {
+			t.Error(tc.failure)
 		}
-	})
-	t.Run("uppercase panic: does match", func(t *testing.T) {
-		hints := scanLogTail([]string{"panic: runtime error"})
-		found := false
-		for _, h := range hints {
-			if h.Label == "go panic" {
-				found = true
-			}
+		return
+	}
+	for _, h := range hints {
+		if h.Label == tc.label {
+			t.Errorf("%s: %+v", tc.failure, h)
 		}
-		if !found {
-			t.Error("exact-case 'panic:' should match the go panic pattern")
-		}
-	})
-	t.Run("lowercase fatal alone does not match fatal pattern", func(t *testing.T) {
-		hints := scanLogTail([]string{"this fatal error was lowercase only"})
-		for _, h := range hints {
-			if h.Label == "fatal log line" {
-				t.Errorf("lowercase 'fatal' unexpectedly matched the case-sensitive fatal pattern: %+v", h)
-			}
-		}
-	})
-	t.Run("FATAL uppercase matches fatal pattern", func(t *testing.T) {
-		hints := scanLogTail([]string{"FATAL: could not connect"})
-		found := false
-		for _, h := range hints {
-			if h.Label == "fatal log line" {
-				found = true
-			}
-		}
-		if !found {
-			t.Error("uppercase 'FATAL' should match the fatal log line pattern")
-		}
-	})
-	t.Run("Fatal capitalized matches fatal pattern", func(t *testing.T) {
-		hints := scanLogTail([]string{"Fatal error occurred during startup"})
-		found := false
-		for _, h := range hints {
-			if h.Label == "fatal log line" {
-				found = true
-			}
-		}
-		if !found {
-			t.Error("capitalized 'Fatal' should match the fatal log line pattern")
-		}
-	})
+	}
 }
 
 func TestHTScanLogTailMostSpecificFirst(t *testing.T) {
@@ -1648,6 +1648,18 @@ func TestHTUnknownRuleEvidenceBranches(t *testing.T) {
 // ---------------------------------------------------------------------------
 // small local test helpers (ht-prefixed to avoid collisions)
 // ---------------------------------------------------------------------------
+
+func htAssertStrings(t *testing.T, field string, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s = %v, want %v", field, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%s[%d] = %q, want %q", field, i, got[i], want[i])
+		}
+	}
+}
 
 func htContainsLine(lines []string, want string) bool {
 	for _, l := range lines {
