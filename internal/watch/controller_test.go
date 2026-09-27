@@ -407,7 +407,7 @@ func TestControllerReportLogSkipsIsDelta(t *testing.T) {
 	requireSkipCounter(0)
 
 	// Exhaust the burst, then force two skips.
-	for i := 0; i < logBurst+2; i++ {
+	for range logBurst + 2 {
 		c.processPod(ctx, crashLoopPod(testPodName, testPodUID, 1))
 	}
 	c.reportLogSkips()
@@ -415,7 +415,7 @@ func TestControllerReportLogSkipsIsDelta(t *testing.T) {
 
 	// Three more skips: the counter must grow by the delta (3), not by the
 	// collector's cumulative total (5) again.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		c.processPod(ctx, crashLoopPod(testPodName, testPodUID, 1))
 	}
 	c.reportLogSkips()

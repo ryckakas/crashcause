@@ -368,7 +368,7 @@ func TestOwnerResolution(t *testing.T) {
 		cs := newClient(t, pod, replicaSet(true))
 		c := New(cs, testOptions())
 
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			if _, err := c.ForPod(context.Background(), testNamespace, testPodName, ""); err != nil {
 				t.Fatalf("ForPod #%d: %v", i, err)
 			}
@@ -1075,7 +1075,7 @@ func TestCollectorConcurrentUse(t *testing.T) {
 	const workers = 8
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

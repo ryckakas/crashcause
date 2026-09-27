@@ -99,12 +99,6 @@ func oomKilledStatus(name string, now time.Time) corev1.ContainerStatus {
 	}
 }
 
-// crashedStatus is an alias kept for readability at call sites that just want
-// "the canonical crashing container status" without naming the cause.
-func crashedStatus(name string, now time.Time) corev1.ContainerStatus {
-	return oomKilledStatus(name, now)
-}
-
 func oomKilledPod(t *testing.T, now time.Time) *corev1.Pod {
 	t.Helper()
 	pod := basePod(t)

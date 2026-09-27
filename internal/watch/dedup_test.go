@@ -62,7 +62,7 @@ func TestDedupCacheObserveSuppressesRepeats(t *testing.T) {
 	if !c.observe(k, testOwner()) {
 		t.Fatal("first observation must emit")
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		clk.advance(time.Minute)
 		if c.observe(k, testOwner()) {
 			t.Fatalf("observation %d inside the reemit interval must be suppressed", i)

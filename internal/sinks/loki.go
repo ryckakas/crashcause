@@ -155,9 +155,9 @@ type lokiSink struct {
 	quit chan struct{}
 	done chan struct{}
 
-	// baseCtx is canceled by Close when the caller's context expires, so an
-	// in-flight push cannot outlive Close and leak the goroutine.
-	baseCtx    context.Context
+	// baseCancel cancels the context that run's pushes derive from. Close
+	// calls it when the caller's context expires, so an in-flight push cannot
+	// outlive Close and leak the goroutine.
 	baseCancel context.CancelFunc
 
 	closeOnce sync.Once
@@ -245,7 +245,6 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 		quit: make(chan struct{}),
 		done: make(chan struct{}),
 
-		baseCtx:    baseCtx,
 		baseCancel: baseCancel,
 	}
 
@@ -257,7 +256,7 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 		s.useBasic = true
 	}
 
-	go s.run()
+	go s.run(baseCtx)
 
 	return s, nil
 }
@@ -354,7 +353,7 @@ func (s *lokiSink) Close(ctx context.Context) error {
 // run is the single background goroutine: it accumulates entries and flushes
 // them when the batch is full, when BatchWait has elapsed since the first
 // pending entry, or when Close asks it to drain.
-func (s *lokiSink) run() {
+func (s *lokiSink) run(ctx context.Context) {
 	defer close(s.done)
 
 	pending := make([]lokiEntry, 0, s.batchSize)
@@ -385,7 +384,7 @@ func (s *lokiSink) run() {
 		}
 		if len(pending) >= s.batchSize {
 			disarm()
-			s.flush(pending)
+			s.flush(ctx, pending)
 			pending = pending[:0]
 		}
 	}
@@ -396,7 +395,7 @@ func (s *lokiSink) run() {
 			add(e)
 		case <-timer.C:
 			armed = false
-			s.flush(pending)
+			s.flush(ctx, pending)
 			pending = pending[:0]
 		case <-s.quit:
 			drained := false
@@ -409,7 +408,7 @@ func (s *lokiSink) run() {
 				}
 			}
 			disarm()
-			s.flush(pending)
+			s.flush(ctx, pending)
 			return
 		}
 	}
@@ -418,7 +417,7 @@ func (s *lokiSink) run() {
 // flush pushes one batch, retrying exactly once after a short backoff. A batch
 // that still fails is counted as dropped: the sink never blocks the pipeline
 // and never grows without bound waiting for Loki to come back.
-func (s *lokiSink) flush(batch []lokiEntry) {
+func (s *lokiSink) flush(ctx context.Context, batch []lokiEntry) {
 	if len(batch) == 0 {
 		return
 	}
@@ -429,14 +428,14 @@ func (s *lokiSink) flush(batch []lokiEntry) {
 		return
 	}
 
-	if err := s.push(body); err != nil {
+	if err := s.push(ctx, body); err != nil {
 		select {
 		case <-time.After(lokiRetryBackoff):
-		case <-s.baseCtx.Done():
+		case <-ctx.Done():
 			s.dropBatch(batch, err)
 			return
 		}
-		if retryErr := s.push(body); retryErr != nil {
+		if retryErr := s.push(ctx, body); retryErr != nil {
 			s.dropBatch(batch, retryErr)
 		}
 	}
@@ -449,8 +448,8 @@ func (s *lokiSink) dropBatch(batch []lokiEntry, err error) {
 	s.errMu.Unlock()
 }
 
-func (s *lokiSink) push(body []byte) error {
-	ctx, cancel := context.WithTimeout(s.baseCtx, s.timeout)
+func (s *lokiSink) push(ctx context.Context, body []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pushURL, bytes.NewReader(body))

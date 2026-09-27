@@ -258,7 +258,7 @@ func TestLokiHappyPathSinglePush(t *testing.T) {
 	base := time.Date(2026, 8, 2, 12, 0, 0, 123456789, time.UTC)
 	summary := "the container's heap grew past the limit"
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		d := lokiTestDiagnosis("prod", engine.CauseOOMKilled, base.Add(time.Duration(i)*time.Second))
 		if i == 2 {
 			d.AISummary = &summary
@@ -319,7 +319,7 @@ func TestLokiFlushesOnBatchSize(t *testing.T) {
 	defer lokiCloseSink(t, s)
 
 	now := time.Now()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := s.Emit(context.Background(), lokiTestDiagnosis("prod", engine.CauseAppExitNonzero, now)); err != nil {
 			t.Fatalf("Emit: %v", err)
 		}
@@ -409,7 +409,7 @@ func TestLokiRetriesOnceThenDropsBatch(t *testing.T) {
 	defer lokiCloseSink(t, s)
 
 	now := time.Now()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := s.Emit(context.Background(), lokiTestDiagnosis("prod", engine.CauseOOMKilled, now)); err != nil {
 			t.Fatalf("Emit: %v", err)
 		}
@@ -437,7 +437,7 @@ func TestLokiRetriesOnceThenDropsBatch(t *testing.T) {
 
 	// The sink must stay usable after a failed batch.
 	ts.status.Store(http.StatusNoContent)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := s.Emit(context.Background(), lokiTestDiagnosis("prod", engine.CauseOOMKilled, now)); err != nil {
 			t.Fatalf("Emit after failure: %v", err)
 		}
@@ -475,7 +475,7 @@ func TestLokiEmitNeverBlocksAndDropsOnFullBuffer(t *testing.T) {
 	const total = 1000
 	emitted := make(chan error, 1)
 	go func() {
-		for i := 0; i < total; i++ {
+		for i := range total {
 			if err := s.Emit(context.Background(), lokiTestDiagnosis("prod", engine.CauseOOMKilled, time.Now())); err != nil {
 				emitted <- fmt.Errorf("Emit(%d): %w", i, err)
 				return

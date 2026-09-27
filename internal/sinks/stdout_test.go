@@ -126,11 +126,11 @@ func TestStdoutEmitConcurrent(t *testing.T) {
 	const goroutines, perGoroutine = 16, 50
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for g := 0; g < goroutines; g++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
 			d := stdoutTestDiagnosis()
-			for i := 0; i < perGoroutine; i++ {
+			for range perGoroutine {
 				if err := s.Emit(context.Background(), d); err != nil {
 					t.Errorf("Emit: %v", err)
 					return

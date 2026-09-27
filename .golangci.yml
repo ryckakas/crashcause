@@ -1,8 +1,9 @@
 # golangci-lint v2 configuration.
 #
-# Policy: no `//nolint` directive without a reason comment
-# (e.g. `//nolint:errcheck // response body close is best-effort here`).
-# A bare `//nolint` is not acceptable in review.
+# Policy: every `//nolint` directive names its linter and carries a reason
+# comment (e.g. `//nolint:errcheck // response body close is best-effort
+# here`). nolintlint enforces this, and also flags directives that no longer
+# suppress anything.
 #
 # Schema reference: https://golangci-lint.run/docs/configuration/file/
 version: "2"
@@ -62,6 +63,11 @@ linters:
     - usestdlibvars
     - usetesting
     - wastedassign
+    - containedctx
+    - intrange
+    - nolintlint
+    - perfsprint
+    - unused
 
   settings:
     # exhaustive guards internal/engine's CauseCode taxonomy: any switch over
@@ -80,6 +86,10 @@ linters:
 
     misspell:
       locale: US
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
 
     # Enforces the layer order documented in AGENTS.md § Architecture: each
     # layer depends only on the ones below it, and internal/engine stays

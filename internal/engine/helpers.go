@@ -143,9 +143,9 @@ func describeEventTiming(evs []Event) string {
 	case first.IsZero() && last.IsZero():
 		return ""
 	case first.IsZero():
-		return fmt.Sprintf("last observed at %s", last.UTC().Format(time.RFC3339))
+		return "last observed at " + last.UTC().Format(time.RFC3339)
 	case last.IsZero() || last.Equal(first):
-		return fmt.Sprintf("first observed at %s", first.UTC().Format(time.RFC3339))
+		return "first observed at " + first.UTC().Format(time.RFC3339)
 	default:
 		return fmt.Sprintf("observed from %s to %s (%s window)",
 			first.UTC().Format(time.RFC3339), last.UTC().Format(time.RFC3339),
