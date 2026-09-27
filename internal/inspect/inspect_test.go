@@ -151,3 +151,19 @@ func TestRunNoPodName(t *testing.T) {
 		t.Errorf("stdout = %q, want empty", out.String())
 	}
 }
+
+func TestExitCodesNeverChange(t *testing.T) {
+	codes := []struct {
+		name      string
+		got, want int
+	}{
+		{"ExitDiagnosed", ExitDiagnosed, 0},
+		{"ExitError", ExitError, 1},
+		{"ExitNothingToDiagnose", ExitNothingToDiagnose, 2},
+	}
+	for _, c := range codes {
+		if c.got != c.want {
+			t.Errorf("%s = %d, want %d: exit codes are the documented CLI contract", c.name, c.got, c.want)
+		}
+	}
+}
