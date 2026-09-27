@@ -280,40 +280,21 @@ func sigkillUnattributedRule() Rule {
 				// The kill IS attributable: a probe caused it.
 				return nil
 			}
-			t := effectiveTermination(in)
 			conf := ConfidenceMedium
 			sparse := len(in.Events) == 0
 			if sparse {
 				conf = ConfidenceLow
 			}
 			d := newDiagnosis(in, CauseSigkillUnattributed, conf)
-			expl := fmt.Sprintf(
-				"%s was killed with SIGKILL (exit 137), but nothing attributes the kill: the kubelet did not report "+
-					"reason OOMKilled and the pod is not being deleted. The suspects are a node-level (system) OOM kill "+
-					"that the kernel did not attribute to this container's cgroup, or an external SIGKILL from outside "+
-					"the container (node agent, operator, or a manual kill).",
-				capitalizeFirst(containerRef(in)))
-			if in.Node.Known && in.Node.MemoryPressure {
-				expl += " The node reports MemoryPressure=true, which makes a node-level OOM kill the leading suspect."
-			}
-			d.Explanation = expl
-			appendEvidence(d, terminationEvidence(t)...)
+			d.Explanation = sigkillUnattributedExplanation(in)
+			appendEvidence(d, terminationEvidence(effectiveTermination(in))...)
 			appendEvidence(d,
 				"no OOMKilled reason reported by the kubelet: the kernel did not attribute a cgroup OOM kill to this container",
 				"pod has no deletionTimestamp, so this is not termination-grace-period expiry")
 			appendEvidence(d, restartEvidence(in)...)
 			appendEvidence(d, memorySpecEvidence(in)...)
 			appendEvidence(d, nodePressureEvidence(in)...)
-			if in.Node.Known && !in.Node.MemoryPressure && !in.Node.DiskPressure && !in.Node.PIDPressure {
-				appendEvidence(d, "node reports no MemoryPressure/DiskPressure/PIDPressure condition")
-			}
-			if !in.Node.Known {
-				appendEvidence(d, "node conditions were not collected, so node-level memory pressure could not be checked")
-			}
-			if sparse {
-				appendEvidence(d, "no events were collected for this pod, so the kill could not be attributed further "+
-					"(confidence lowered)")
-			}
+			appendEvidence(d, sigkillAttributionGaps(in, sparse)...)
 			appendSteps(d,
 				"kubectl describe node <node>    # look at the MemoryPressure / DiskPressure conditions",
 				"kubectl get events -A --field-selector involvedObject.kind=Node    # node-level OOM and eviction events",
@@ -325,6 +306,34 @@ func sigkillUnattributedRule() Rule {
 			return d
 		},
 	}
+}
+
+func sigkillUnattributedExplanation(in Inputs) string {
+	expl := fmt.Sprintf(
+		"%s was killed with SIGKILL (exit 137), but nothing attributes the kill: the kubelet did not report "+
+			"reason OOMKilled and the pod is not being deleted. The suspects are a node-level (system) OOM kill "+
+			"that the kernel did not attribute to this container's cgroup, or an external SIGKILL from outside "+
+			"the container (node agent, operator, or a manual kill).",
+		capitalizeFirst(containerRef(in)))
+	if in.Node.Known && in.Node.MemoryPressure {
+		expl += " The node reports MemoryPressure=true, which makes a node-level OOM kill the leading suspect."
+	}
+	return expl
+}
+
+func sigkillAttributionGaps(in Inputs, sparse bool) []string {
+	var ev []string
+	if in.Node.Known && !in.Node.MemoryPressure && !in.Node.DiskPressure && !in.Node.PIDPressure {
+		ev = append(ev, "node reports no MemoryPressure/DiskPressure/PIDPressure condition")
+	}
+	if !in.Node.Known {
+		ev = append(ev, "node conditions were not collected, so node-level memory pressure could not be checked")
+	}
+	if sparse {
+		ev = append(ev, "no events were collected for this pod, so the kill could not be attributed further "+
+			"(confidence lowered)")
+	}
+	return ev
 }
 
 // ---------------------------------------------------------------------------
@@ -413,52 +422,15 @@ func probeLivenessRule() Rule {
 			if !ok {
 				return nil
 			}
-			conf := ConfidenceMedium
-			if len(killing) > 0 {
-				conf = ConfidenceHigh
-			}
-			failures := totalEventCount(unhealthy)
-			d := newDiagnosis(in, CauseProbeLiveness, conf)
-			expl := fmt.Sprintf(
-				"The kubelet restarted %s because its liveness probe kept failing (%d recorded Unhealthy events). "+
-					"The container process was alive but did not answer the liveness probe, so Kubernetes killed it on purpose.",
-				containerRef(in), failures)
-			budgets, hasBudget := probeBudget("liveness", in.Liveness)
-			if hasBudget {
-				expl += fmt.Sprintf(" With failureThreshold=%d and periodSeconds=%d the container is killed after roughly %s of failing probes",
-					in.Liveness.FailureThreshold, in.Liveness.PeriodSeconds, formatDuration(budgets.probing))
-				if budgets.total > budgets.probing {
-					expl += fmt.Sprintf(", i.e. about %s after it starts (initialDelaySeconds=%d runs no probes at all)",
-						formatDuration(budgets.total), in.Liveness.InitialDelaySeconds)
-				}
-				expl += "."
-			}
-			d.Explanation = expl
-
-			for _, e := range unhealthy {
-				appendEvidence(d, describeEvent(e))
-			}
-			for _, e := range killing {
-				appendEvidence(d, describeEvent(e))
-			}
-			if t := describeEventTiming(unhealthy); t != "" {
-				appendEvidence(d, "liveness failures "+t)
-			}
-			appendEvidence(d, fmt.Sprintf("observed liveness probe failures: %d", failures))
-			if hasBudget {
-				appendEvidence(d, budgets.line)
-			} else {
-				appendEvidence(d, "liveness probe configuration was not collected")
-			}
+			p := newProbeFailure(in, "liveness", in.Liveness, unhealthy, killing)
+			d := newDiagnosis(in, CauseProbeLiveness, p.confidence())
+			d.Explanation = livenessExplanation(p)
+			appendEvidence(d, p.eventEvidence()...)
+			appendEvidence(d, fmt.Sprintf("observed liveness probe failures: %d", p.failures))
+			appendEvidence(d, p.budgetEvidence())
 			appendEvidence(d, restartEvidence(in)...)
 			appendEvidence(d, terminationEvidence(effectiveTermination(in))...)
-			if in.Startup.Defined {
-				if sb, okB := probeBudget("startup", in.Startup); okB {
-					appendEvidence(d, sb.line)
-				}
-			} else {
-				appendEvidence(d, "no startup probe is defined, so the liveness probe also governs slow startups")
-			}
+			appendEvidence(d, startupProbeEvidence(in)...)
 			appendSteps(d,
 				"Call the liveness endpoint yourself: kubectl exec "+podRef(in)+" "+nsFlag(in)+
 					containerFlag(in)+" -- wget -qO- http://localhost:<port><path>",
@@ -470,6 +442,84 @@ func probeLivenessRule() Rule {
 			return d
 		},
 	}
+}
+
+type probeFailure struct {
+	in        Inputs
+	probe     string
+	unhealthy []Event
+	killing   []Event
+	failures  int32
+	budget    probeBudgets
+	hasBudget bool
+}
+
+func newProbeFailure(in Inputs, probe string, spec ProbeSpec, unhealthy, killing []Event) probeFailure {
+	budget, hasBudget := probeBudget(probe, spec)
+	return probeFailure{
+		in:        in,
+		probe:     probe,
+		unhealthy: unhealthy,
+		killing:   killing,
+		failures:  totalEventCount(unhealthy),
+		budget:    budget,
+		hasBudget: hasBudget,
+	}
+}
+
+func (p probeFailure) confidence() Confidence {
+	if len(p.killing) > 0 {
+		return ConfidenceHigh
+	}
+	return ConfidenceMedium
+}
+
+func (p probeFailure) eventEvidence() []string {
+	ev := make([]string, 0, len(p.unhealthy)+len(p.killing)+1)
+	for _, e := range p.unhealthy {
+		ev = append(ev, describeEvent(e))
+	}
+	for _, e := range p.killing {
+		ev = append(ev, describeEvent(e))
+	}
+	if t := describeEventTiming(p.unhealthy); t != "" {
+		ev = append(ev, p.probe+" failures "+t)
+	}
+	return ev
+}
+
+func (p probeFailure) budgetEvidence() string {
+	if p.hasBudget {
+		return p.budget.line
+	}
+	return p.probe + " probe configuration was not collected"
+}
+
+func livenessExplanation(p probeFailure) string {
+	expl := fmt.Sprintf(
+		"The kubelet restarted %s because its liveness probe kept failing (%d recorded Unhealthy events). "+
+			"The container process was alive but did not answer the liveness probe, so Kubernetes killed it on purpose.",
+		containerRef(p.in), p.failures)
+	if !p.hasBudget {
+		return expl
+	}
+	expl += fmt.Sprintf(" With failureThreshold=%d and periodSeconds=%d the container is killed after roughly %s of failing probes",
+		p.in.Liveness.FailureThreshold, p.in.Liveness.PeriodSeconds, formatDuration(p.budget.probing))
+	if p.budget.total > p.budget.probing {
+		expl += fmt.Sprintf(", i.e. about %s after it starts (initialDelaySeconds=%d runs no probes at all)",
+			formatDuration(p.budget.total), p.in.Liveness.InitialDelaySeconds)
+	}
+	return expl + "."
+}
+
+func startupProbeEvidence(in Inputs) []string {
+	if !in.Startup.Defined {
+		return []string{"no startup probe is defined, so the liveness probe also governs slow startups"}
+	}
+	if sb, ok := probeBudget("startup", in.Startup); ok {
+		return []string{sb.line}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -485,51 +535,12 @@ func probeStartupRule() Rule {
 			if !ok {
 				return nil
 			}
-			conf := ConfidenceMedium
-			if len(killing) > 0 {
-				conf = ConfidenceHigh
-			}
-			failures := totalEventCount(unhealthy)
-			d := newDiagnosis(in, CauseProbeStartup, conf)
-			expl := fmt.Sprintf(
-				"%s never finished starting up: its startup probe failed %d times and the kubelet restarted the container "+
-					"before the application became ready to serve.",
-				capitalizeFirst(containerRef(in)), failures)
-
-			budgets, hasBudget := probeBudget("startup", in.Startup)
+			p := newProbeFailure(in, "startup", in.Startup, unhealthy, killing)
 			observed, hasObserved := observedStartupWindow(in)
-			if hasBudget && hasObserved {
-				// observed is measured from container start, so it is compared
-				// against the total (probing plus initialDelaySeconds), while
-				// the quoted arithmetic must show the probing budget alone.
-				if observed <= budgets.total+2*time.Second {
-					expl += fmt.Sprintf(" The startup budget is failureThreshold=%d x periodSeconds=%d = %s and the container "+
-						"only ran %s before being killed, so the budget is too tight for this application's startup time.",
-						in.Startup.FailureThreshold, in.Startup.PeriodSeconds, formatDuration(budgets.probing), formatDuration(observed))
-				} else {
-					expl += fmt.Sprintf(" The startup budget is %s; the container ran %s, so it was still failing its probe "+
-						"well past the budget.", formatDuration(budgets.probing), formatDuration(observed))
-				}
-			} else if hasBudget {
-				expl += fmt.Sprintf(" The startup budget is failureThreshold=%d x periodSeconds=%d = %s.",
-					in.Startup.FailureThreshold, in.Startup.PeriodSeconds, formatDuration(budgets.probing))
-			}
-			d.Explanation = expl
-
-			for _, e := range unhealthy {
-				appendEvidence(d, describeEvent(e))
-			}
-			for _, e := range killing {
-				appendEvidence(d, describeEvent(e))
-			}
-			if t := describeEventTiming(unhealthy); t != "" {
-				appendEvidence(d, "startup failures "+t)
-			}
-			if hasBudget {
-				appendEvidence(d, budgets.line)
-			} else {
-				appendEvidence(d, "startup probe configuration was not collected")
-			}
+			d := newDiagnosis(in, CauseProbeStartup, p.confidence())
+			d.Explanation = startupExplanation(p, observed, hasObserved)
+			appendEvidence(d, p.eventEvidence()...)
+			appendEvidence(d, p.budgetEvidence())
 			if hasObserved {
 				appendEvidence(d, "observed startup window: container ran "+formatDuration(observed)+" before termination")
 			}
@@ -543,6 +554,29 @@ func probeStartupRule() Rule {
 			return d
 		},
 	}
+}
+
+func startupExplanation(p probeFailure, observed time.Duration, hasObserved bool) string {
+	expl := fmt.Sprintf(
+		"%s never finished starting up: its startup probe failed %d times and the kubelet restarted the container "+
+			"before the application became ready to serve.",
+		capitalizeFirst(containerRef(p.in)), p.failures)
+	// observed is measured from container start, so it is compared against
+	// the total (probing plus initialDelaySeconds), while the quoted
+	// arithmetic must show the probing budget alone.
+	switch {
+	case p.hasBudget && hasObserved && observed <= p.budget.total+2*time.Second:
+		expl += fmt.Sprintf(" The startup budget is failureThreshold=%d x periodSeconds=%d = %s and the container "+
+			"only ran %s before being killed, so the budget is too tight for this application's startup time.",
+			p.in.Startup.FailureThreshold, p.in.Startup.PeriodSeconds, formatDuration(p.budget.probing), formatDuration(observed))
+	case p.hasBudget && hasObserved:
+		expl += fmt.Sprintf(" The startup budget is %s; the container ran %s, so it was still failing its probe "+
+			"well past the budget.", formatDuration(p.budget.probing), formatDuration(observed))
+	case p.hasBudget:
+		expl += fmt.Sprintf(" The startup budget is failureThreshold=%d x periodSeconds=%d = %s.",
+			p.in.Startup.FailureThreshold, p.in.Startup.PeriodSeconds, formatDuration(p.budget.probing))
+	}
+	return expl
 }
 
 // ---------------------------------------------------------------------------
@@ -821,28 +855,9 @@ func volumeMountFailureRule() Rule {
 			if len(evs) == 0 {
 				return nil
 			}
-			var names []string
-			seen := map[string]bool{}
-			for _, e := range evs {
-				for _, n := range parseVolumeNames(e.Message) {
-					if !seen[n] {
-						seen[n] = true
-						names = append(names, n)
-					}
-				}
-			}
+			names := volumeNamesFromEvents(evs)
 			d := newDiagnosis(in, CauseVolumeMountFailure, ConfidenceHigh)
-			if len(names) > 0 {
-				d.Explanation = fmt.Sprintf(
-					"The pod could not start because the kubelet failed to attach or mount volume(s) %s. "+
-						"%s never ran: the container cannot be created until every volume is mounted.",
-					strings.Join(quoteAll(names), ", "), capitalizeFirst(containerRef(in)))
-			} else {
-				d.Explanation = fmt.Sprintf(
-					"The pod could not start because a volume failed to attach or mount. %s never ran: the container "+
-						"cannot be created until every volume is mounted.",
-					capitalizeFirst(containerRef(in)))
-			}
+			d.Explanation = volumeMountExplanation(in, names)
 			for _, e := range evs {
 				appendEvidence(d, describeEvent(e))
 			}
@@ -862,6 +877,33 @@ func volumeMountFailureRule() Rule {
 			return d
 		},
 	}
+}
+
+func volumeNamesFromEvents(evs []Event) []string {
+	var names []string
+	seen := map[string]bool{}
+	for _, e := range evs {
+		for _, n := range parseVolumeNames(e.Message) {
+			if !seen[n] {
+				seen[n] = true
+				names = append(names, n)
+			}
+		}
+	}
+	return names
+}
+
+func volumeMountExplanation(in Inputs, names []string) string {
+	if len(names) > 0 {
+		return fmt.Sprintf(
+			"The pod could not start because the kubelet failed to attach or mount volume(s) %s. "+
+				"%s never ran: the container cannot be created until every volume is mounted.",
+			strings.Join(quoteAll(names), ", "), capitalizeFirst(containerRef(in)))
+	}
+	return fmt.Sprintf(
+		"The pod could not start because a volume failed to attach or mount. %s never ran: the container "+
+			"cannot be created until every volume is mounted.",
+		capitalizeFirst(containerRef(in)))
 }
 
 func quoteAll(in []string) []string {
@@ -953,44 +995,8 @@ func initContainerStuckRule() Rule {
 				conf = ConfidenceHigh
 			}
 			d := newDiagnosis(in, CauseInitContainerStuck, conf)
-			switch {
-			case in.ActiveDeadlineExceeded && longRunning:
-				d.Explanation = fmt.Sprintf(
-					"Init container %q has been running for %s (threshold %s) and the pod exceeded its "+
-						"activeDeadlineSeconds. The pod is stuck in initialization: it is not crashing, it is waiting "+
-						"for something that never happens.",
-					in.Container, formatDuration(in.RunningDuration), formatDuration(threshold))
-			case in.ActiveDeadlineExceeded:
-				d.Explanation = fmt.Sprintf(
-					"The pod exceeded its activeDeadlineSeconds while init container %q was still running. The pod is "+
-						"stuck in initialization: it is not crashing, it is waiting for something that never happens.",
-					in.Container)
-			default:
-				d.Explanation = fmt.Sprintf(
-					"Init container %q has been running for %s, which is longer than the %s stuck-init threshold. The "+
-						"pod is stuck in Init and is not crashing: the init container is most likely waiting on a "+
-						"dependency that is not coming up.",
-					in.Container, formatDuration(in.RunningDuration), formatDuration(threshold))
-			}
-			if longRunning {
-				appendEvidence(d, fmt.Sprintf("init container has been running for %s (stuck-init threshold %s)",
-					formatDuration(in.RunningDuration), formatDuration(threshold)))
-			}
-			if !in.Running.StartedAt.IsZero() {
-				appendEvidence(d, "running since "+in.Running.StartedAt.UTC().Format(time.RFC3339))
-			}
-			if in.ActiveDeadlineExceeded {
-				appendEvidence(d, "pod activeDeadlineSeconds exceeded")
-			}
-			if in.PodPhase != "" {
-				appendEvidence(d, "pod phase: "+in.PodPhase)
-			}
-			appendEvidence(d, restartEvidence(in)...)
-			for _, e := range in.Events {
-				if strings.EqualFold(e.Type, "Warning") {
-					appendEvidence(d, describeEvent(e))
-				}
-			}
+			d.Explanation = initStuckExplanation(in, threshold, longRunning)
+			appendEvidence(d, initStuckEvidence(in, threshold, longRunning)...)
 			appendSteps(d,
 				logsCommand(in, false)+" -f    # what is the init container waiting for?",
 				"Check the dependency it waits on (a Service with no endpoints, a database, a migration job)",
@@ -1001,6 +1007,52 @@ func initContainerStuckRule() Rule {
 			return d
 		},
 	}
+}
+
+func initStuckExplanation(in Inputs, threshold time.Duration, longRunning bool) string {
+	switch {
+	case in.ActiveDeadlineExceeded && longRunning:
+		return fmt.Sprintf(
+			"Init container %q has been running for %s (threshold %s) and the pod exceeded its "+
+				"activeDeadlineSeconds. The pod is stuck in initialization: it is not crashing, it is waiting "+
+				"for something that never happens.",
+			in.Container, formatDuration(in.RunningDuration), formatDuration(threshold))
+	case in.ActiveDeadlineExceeded:
+		return fmt.Sprintf(
+			"The pod exceeded its activeDeadlineSeconds while init container %q was still running. The pod is "+
+				"stuck in initialization: it is not crashing, it is waiting for something that never happens.",
+			in.Container)
+	default:
+		return fmt.Sprintf(
+			"Init container %q has been running for %s, which is longer than the %s stuck-init threshold. The "+
+				"pod is stuck in Init and is not crashing: the init container is most likely waiting on a "+
+				"dependency that is not coming up.",
+			in.Container, formatDuration(in.RunningDuration), formatDuration(threshold))
+	}
+}
+
+func initStuckEvidence(in Inputs, threshold time.Duration, longRunning bool) []string {
+	var ev []string
+	if longRunning {
+		ev = append(ev, fmt.Sprintf("init container has been running for %s (stuck-init threshold %s)",
+			formatDuration(in.RunningDuration), formatDuration(threshold)))
+	}
+	if !in.Running.StartedAt.IsZero() {
+		ev = append(ev, "running since "+in.Running.StartedAt.UTC().Format(time.RFC3339))
+	}
+	if in.ActiveDeadlineExceeded {
+		ev = append(ev, "pod activeDeadlineSeconds exceeded")
+	}
+	if in.PodPhase != "" {
+		ev = append(ev, "pod phase: "+in.PodPhase)
+	}
+	ev = append(ev, restartEvidence(in)...)
+	for _, e := range in.Events {
+		if strings.EqualFold(e.Type, "Warning") {
+			ev = append(ev, describeEvent(e))
+		}
+	}
+	return ev
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,85 +1068,99 @@ func unschedulableRule() Rule {
 			if len(evs) == 0 {
 				return nil
 			}
-			msg := evs[0].Message
-			for _, e := range evs {
-				if len(e.Message) > len(msg) {
-					msg = e.Message
-				}
-			}
+			msg := longestEventMessage(evs)
 			sc := parseSchedulingFailure(msg)
 			d := newDiagnosis(in, CauseUnschedulable, ConfidenceHigh)
-			switch sc.Kind {
-			case "resources":
-				d.Explanation = fmt.Sprintf(
-					"The pod is Pending because the scheduler found no node with enough allocatable %s. This is a "+
-						"capacity problem, not a container problem: nothing has started, so there are no logs to read.",
-					strings.Join(sc.Resources, " and "))
-				appendSteps(d,
-					"kubectl describe nodes | grep -A5 'Allocated resources'    # compare with this pod's requests",
-					"Lower spec.containers[].resources.requests to something the cluster can actually satisfy",
-					"Add capacity (scale the node pool) or wait for the cluster autoscaler",
-					"Check ResourceQuota and LimitRange in the namespace: they can inflate effective requests",
-				)
-			case "taints":
-				d.Explanation = fmt.Sprintf(
-					"The pod is Pending because every candidate node carries a taint the pod does not tolerate (%s). "+
-						"Nothing has started, so there are no logs to read.",
-					strings.Join(sc.Taints, "; "))
-				appendSteps(d,
-					"Add a matching toleration to the pod spec, or remove the taint from the nodes",
-					"kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints",
-					"Dedicated node pools (GPU, spot, control-plane) are the usual source of this taint",
-				)
-			case "affinity":
-				d.Explanation = "The pod is Pending because no node matches its nodeSelector / node affinity. " +
-					"Nothing has started, so there are no logs to read."
-				appendSteps(d,
-					"kubectl get nodes --show-labels    # compare with the pod's nodeSelector / nodeAffinity",
-					"Check for a typo in a label key or value (topology.kubernetes.io/zone, node pool labels)",
-					"Relax requiredDuringSchedulingIgnoredDuringExecution to preferred if the constraint is a preference",
-				)
-			case "volume":
-				d.Explanation = "The pod is Pending because of a volume constraint: the scheduler could not place it " +
-					"near the persistent volume it must use (typically a zone conflict, or no volume available to bind). " +
-					"Nothing has started, so there are no logs to read."
-				appendSteps(d,
-					"kubectl get pv,pvc "+nsFlag(in)+"    # check binding state and the PV's node affinity",
-					"Use a StorageClass with volumeBindingMode: WaitForFirstConsumer to avoid zone conflicts",
-					"Check per-node volume attach limits if the nodes already carry many volumes",
-				)
-			case "pods":
-				d.Explanation = "The pod is Pending because the candidate nodes are already at their maximum pod count. " +
-					"Nothing has started, so there are no logs to read."
-				appendSteps(d,
-					"Add nodes, or raise the kubelet --max-pods / node pool pod density setting",
-					"kubectl get pods -A -o wide | awk '{print $8}' | sort | uniq -c    # pods per node",
-				)
-			default:
-				d.Explanation = "The pod is Pending: the scheduler reported FailedScheduling and could not place it on " +
-					"any node. Nothing has started, so there are no logs to read."
-				appendSteps(d, "Read the FailedScheduling message above: it enumerates why each node was rejected")
-			}
-
-			appendEvidence(d, "pod phase: Pending")
-			for _, e := range evs {
-				appendEvidence(d, describeEvent(e))
-			}
-			if m := reNodesAvailable.FindStringSubmatch(msg); m != nil {
-				appendEvidence(d, fmt.Sprintf("scheduler rejected all %s candidate nodes (%s/%s available)", m[2], m[1], m[2]))
-			}
-			for _, r := range sc.Resources {
-				appendEvidence(d, "insufficient node resource: "+r)
-			}
-			for _, t := range sc.Taints {
-				appendEvidence(d, "untolerated taint: "+t)
-			}
-			appendEvidence(d, sortedResourceEvidence("container requests", in.Requests)...)
-			appendEvidence(d, sortedResourceEvidence("container limits", in.Limits)...)
+			explanation, steps := schedulingFailureAdvice(in, sc)
+			d.Explanation = explanation
+			appendSteps(d, steps...)
+			appendEvidence(d, schedulingEvidence(in, evs, msg, sc)...)
 			appendSteps(d, describeCommand(in)+"    # full scheduler message in the Events section")
 			return d
 		},
 	}
+}
+
+func longestEventMessage(evs []Event) string {
+	msg := evs[0].Message
+	for _, e := range evs {
+		if len(e.Message) > len(msg) {
+			msg = e.Message
+		}
+	}
+	return msg
+}
+
+func schedulingFailureAdvice(in Inputs, sc schedulingCause) (string, []string) {
+	switch sc.Kind {
+	case "resources":
+		return fmt.Sprintf(
+				"The pod is Pending because the scheduler found no node with enough allocatable %s. This is a "+
+					"capacity problem, not a container problem: nothing has started, so there are no logs to read.",
+				strings.Join(sc.Resources, " and ")),
+			[]string{
+				"kubectl describe nodes | grep -A5 'Allocated resources'    # compare with this pod's requests",
+				"Lower spec.containers[].resources.requests to something the cluster can actually satisfy",
+				"Add capacity (scale the node pool) or wait for the cluster autoscaler",
+				"Check ResourceQuota and LimitRange in the namespace: they can inflate effective requests",
+			}
+	case "taints":
+		return fmt.Sprintf(
+				"The pod is Pending because every candidate node carries a taint the pod does not tolerate (%s). "+
+					"Nothing has started, so there are no logs to read.",
+				strings.Join(sc.Taints, "; ")),
+			[]string{
+				"Add a matching toleration to the pod spec, or remove the taint from the nodes",
+				"kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints",
+				"Dedicated node pools (GPU, spot, control-plane) are the usual source of this taint",
+			}
+	case "affinity":
+		return "The pod is Pending because no node matches its nodeSelector / node affinity. " +
+				"Nothing has started, so there are no logs to read.",
+			[]string{
+				"kubectl get nodes --show-labels    # compare with the pod's nodeSelector / nodeAffinity",
+				"Check for a typo in a label key or value (topology.kubernetes.io/zone, node pool labels)",
+				"Relax requiredDuringSchedulingIgnoredDuringExecution to preferred if the constraint is a preference",
+			}
+	case "volume":
+		return "The pod is Pending because of a volume constraint: the scheduler could not place it " +
+				"near the persistent volume it must use (typically a zone conflict, or no volume available to bind). " +
+				"Nothing has started, so there are no logs to read.",
+			[]string{
+				"kubectl get pv,pvc " + nsFlag(in) + "    # check binding state and the PV's node affinity",
+				"Use a StorageClass with volumeBindingMode: WaitForFirstConsumer to avoid zone conflicts",
+				"Check per-node volume attach limits if the nodes already carry many volumes",
+			}
+	case "pods":
+		return "The pod is Pending because the candidate nodes are already at their maximum pod count. " +
+				"Nothing has started, so there are no logs to read.",
+			[]string{
+				"Add nodes, or raise the kubelet --max-pods / node pool pod density setting",
+				"kubectl get pods -A -o wide | awk '{print $8}' | sort | uniq -c    # pods per node",
+			}
+	default:
+		return "The pod is Pending: the scheduler reported FailedScheduling and could not place it on " +
+				"any node. Nothing has started, so there are no logs to read.",
+			[]string{"Read the FailedScheduling message above: it enumerates why each node was rejected"}
+	}
+}
+
+func schedulingEvidence(in Inputs, evs []Event, msg string, sc schedulingCause) []string {
+	ev := []string{"pod phase: Pending"}
+	for _, e := range evs {
+		ev = append(ev, describeEvent(e))
+	}
+	if m := reNodesAvailable.FindStringSubmatch(msg); m != nil {
+		ev = append(ev, fmt.Sprintf("scheduler rejected all %s candidate nodes (%s/%s available)", m[2], m[1], m[2]))
+	}
+	for _, r := range sc.Resources {
+		ev = append(ev, "insufficient node resource: "+r)
+	}
+	for _, t := range sc.Taints {
+		ev = append(ev, "untolerated taint: "+t)
+	}
+	ev = append(ev, sortedResourceEvidence("container requests", in.Requests)...)
+	return append(ev, sortedResourceEvidence("container limits", in.Limits)...)
 }
 
 // ---------------------------------------------------------------------------

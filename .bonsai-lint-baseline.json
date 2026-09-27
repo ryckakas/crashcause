@@ -20,9 +20,6 @@
       "TestSigkillFamilyAndLifecycleNoise": 22,
       "TestUnschedulableVariants": 20
     },
-    "internal/engine/helpers.go": {
-      "imagePullContext": 24
-    },
     "internal/engine/helpers_test.go": {
       "TestHTImagePullContextAndClassification": 21,
       "TestHTParseMissingReference": 16,
@@ -32,14 +29,6 @@
       "TestHTPromotePrimary": 18,
       "TestHTScanLogTailCaseSensitivity": 31,
       "TestHTUnknownRuleEvidenceBranches": 16
-    },
-    "internal/engine/rules.go": {
-      "initContainerStuckRule": 24,
-      "probeLivenessRule": 24,
-      "probeStartupRule": 23,
-      "sigkillUnattributedRule": 17,
-      "unschedulableRule": 17,
-      "volumeMountFailureRule": 21
     },
     "internal/engine/rules_test.go": {
       "TestRtEvictedResourceVariants": 16
