@@ -29,7 +29,8 @@ make race           # go test -race ./...
 make cover          # race + coverage.out + go tool cover -func
 make fmt            # gofumpt -w . && goimports -w .   (requires gofumpt, goimports)
 make lint           # golangci-lint run                (requires golangci-lint v2)
-make check          # what CI gates on: lint, race, go vet, govulncheck
+make shellcheck     # shellcheck -x on every tracked *.sh  (requires shellcheck)
+make check          # what CI gates on: lint, shellcheck, race, go vet, govulncheck
 make helm-lint       # helm lint + template, asserts pods/log RBAC is present/absent correctly
 make e2e            # kind-based end-to-end run (requires kind, kubectl, jq) — see hack/e2e.sh
 ```
@@ -42,12 +43,14 @@ go test -run TestClassify_OOMKilled ./internal/engine/...
 go test -race -run TestName ./internal/collect/...
 ```
 
-`make check` is what CI actually gates on for the `lint`/`test`/`build`/`govulncheck`/`helm` jobs
-(see `.github/workflows/ci.yml`); `e2e-kind` in CI is best-effort/non-gating. Run `make check`
-before considering a change done. golangci-lint config (`.golangci.yml`) enables `exhaustive`
+`make check` is what CI actually gates on for the `lint`/`test`/`build`/`govulncheck`/`shellcheck`/
+`helm` jobs (see `.github/workflows/ci.yml`); `e2e-kind` in CI is best-effort/non-gating. Run
+`make check` before considering a change done. golangci-lint config (`.golangci.yml`) enables `exhaustive`
 switch-checking specifically over `engine.CauseCode` with `default-signifies-exhaustive: false` —
 **adding a new CauseCode will force-fail every `switch` over CauseCode that doesn't handle it**,
 by design. Bare `//nolint` (no reason comment) is a lint failure, not just a style nit.
+The layer order under Architecture is enforced by `depguard` rules in `.golangci.yml` — an
+import that points up the stack (or `k8s.io`/`os`/`net` inside `internal/engine`) fails lint.
 
 ## Architecture
 

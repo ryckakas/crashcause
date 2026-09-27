@@ -121,6 +121,33 @@ jobs:
         with:
           go-version-file: go.mod
 
+  # --- shellcheck: required, genuinely gating -------------------------------
+  # Pinned (version + archive checksum) instead of the runner's preinstalled
+  # shellcheck, whose version moves with the ubuntu-latest image and would
+  # let findings appear or vanish without any change in this repo.
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    env:
+      SHELLCHECK_VERSION: "0.11.0"
+      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install pinned ShellCheck
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/shellcheck.tar.xz"
+          curl -fsSL -o "${archive}" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  ${archive}" | sha256sum -c -
+          tar -xJf "${archive}" -C "${RUNNER_TEMP}"
+          sudo install "${RUNNER_TEMP}/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
+
+      - name: ShellCheck every tracked *.sh
+        run: make shellcheck
+
   # --- helm: required and gating. charts/crashcause/ exists, so this really
   #     runs `helm lint` plus both `helm template` renders and enforces the
   #     severable-RBAC contract from spec §8: the `pods/log` rule is present by

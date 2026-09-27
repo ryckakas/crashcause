@@ -5,8 +5,8 @@
 #
 # Several targets depend on tools that are NOT installed by default on a
 # fresh dev machine: golangci-lint, gofumpt, goimports, helm, kind,
-# govulncheck. Each such target checks for its tool first and fails with an
-# install hint rather than a confusing downstream error.
+# govulncheck, shellcheck. Each such target checks for its tool first and
+# fails with an install hint rather than a confusing downstream error.
 
 SHELL := /bin/bash
 
@@ -16,20 +16,21 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
-.PHONY: help fmt lint test race cover build e2e helm-lint check clean
+.PHONY: help fmt lint shellcheck test race cover build e2e helm-lint check clean
 
 ## help: show this help (default goal)
 help:
 	@echo "crashcause make targets:"
 	@echo "  fmt        - gofumpt + goimports (auto-fix, local dev)"
 	@echo "  lint       - golangci-lint run"
+	@echo "  shellcheck - shellcheck every tracked *.sh"
 	@echo "  test       - go test ./..."
 	@echo "  race       - go test -race ./..."
 	@echo "  cover      - race tests + coverage report (coverage.out)"
 	@echo "  build      - build ./cmd/crashcause into ./bin/crashcause"
 	@echo "  e2e        - kind-based end-to-end run (requires kind + kubectl + jq)"
 	@echo "  helm-lint  - lint + template charts/crashcause, incl. pods/log RBAC assertions"
-	@echo "  check      - the set CI runs: lint, race, vet, govulncheck"
+	@echo "  check      - the set CI runs: lint, shellcheck, race, vet, govulncheck"
 	@echo "  clean      - remove build/coverage artifacts"
 
 .DEFAULT_GOAL := help
@@ -49,6 +50,10 @@ fmt:
 lint:
 	$(call check_tool,golangci-lint,official install script at https://golangci-lint.run/welcome/install/ or: brew install golangci-lint)
 	golangci-lint run
+
+shellcheck:
+	$(call check_tool,shellcheck,brew install shellcheck or see https://github.com/koalaman/shellcheck#installing)
+	shellcheck -x $(shell git ls-files '*.sh')
 
 test:
 	go test ./...
@@ -101,7 +106,7 @@ helm-lint:
 	@echo "crashcause: OK - pods/log is absent when logCollection.enabled=false"
 
 # check mirrors what CI runs: green here should mean green in CI.
-check: lint race
+check: lint shellcheck race
 	$(call check_tool,govulncheck,go install golang.org/x/vuln/cmd/govulncheck@latest)
 	go vet ./...
 	govulncheck ./...

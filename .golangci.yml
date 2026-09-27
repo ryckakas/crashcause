@@ -7,6 +7,12 @@
 # Schema reference: https://golangci-lint.run/docs/configuration/file/
 version: "2"
 
+# Report every finding instead of golangci-lint's default 50-per-linter /
+# 3-identical caps, which hide how much a newly enabled linter would flag.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 linters:
   # Start from nothing and enable exactly the linters we want, rather than
   # inheriting golangci-lint's "standard" default set — this keeps the
@@ -28,6 +34,34 @@ linters:
     - misspell
     - unparam
     - copyloopvar
+    - bidichk
+    - depguard
+    - dupl
+    - dupword
+    - durationcheck
+    - errchkjson
+    - errname
+    - fatcontext
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - ineffassign
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nosprintfhostport
+    - prealloc
+    - predeclared
+    - reassign
+    - recvcheck
+    - sloglint
+    - thelper
+    - tparallel
+    - unconvert
+    - usestdlibvars
+    - usetesting
+    - wastedassign
 
   settings:
     # exhaustive guards internal/engine's CauseCode taxonomy: any switch over
@@ -47,14 +81,77 @@ linters:
     misspell:
       locale: US
 
+    # Enforces the layer order documented in AGENTS.md § Architecture: each
+    # layer depends only on the ones below it, and internal/engine stays
+    # pure (no k8s.io, filesystem, or network) so it is testable without a
+    # cluster.
+    depguard:
+      rules:
+        engine-pure:
+          files:
+            - "**/internal/engine/**"
+          deny:
+            - pkg: k8s.io
+              desc: internal/engine must never import k8s.io; internal/collect converts pods into engine.Inputs
+            - pkg: os
+              desc: internal/engine performs no I/O
+            - pkg: io/fs
+              desc: internal/engine performs no I/O
+            - pkg: net$
+              desc: internal/engine performs no I/O
+            - pkg: net/http
+              desc: internal/engine performs no I/O
+            - pkg: github.com/ryckakas/crashcause/internal/collect
+              desc: internal/engine is the bottom layer
+            - pkg: github.com/ryckakas/crashcause/internal/ai
+              desc: internal/engine is the bottom layer
+            - pkg: github.com/ryckakas/crashcause/internal/sinks
+              desc: internal/engine is the bottom layer
+            - pkg: github.com/ryckakas/crashcause/internal/inspect
+              desc: internal/engine is the bottom layer
+            - pkg: github.com/ryckakas/crashcause/internal/watch
+              desc: internal/engine is the bottom layer
+            - pkg: github.com/ryckakas/crashcause/internal/cli
+              desc: internal/engine is the bottom layer
+        below-driving-modes:
+          files:
+            - "**/internal/collect/**"
+            - "**/internal/ai/**"
+            - "**/internal/sinks/**"
+          deny:
+            - pkg: github.com/ryckakas/crashcause/internal/inspect
+              desc: the driving modes build on collect/ai/sinks, not the other way round
+            - pkg: github.com/ryckakas/crashcause/internal/watch
+              desc: the driving modes build on collect/ai/sinks, not the other way round
+            - pkg: github.com/ryckakas/crashcause/internal/cli
+              desc: internal/cli is cobra wiring only and sits on top
+        inspect-standalone:
+          files:
+            - "**/internal/inspect/**"
+          deny:
+            - pkg: github.com/ryckakas/crashcause/internal/watch
+              desc: inspect and watch are independent driving modes
+            - pkg: github.com/ryckakas/crashcause/internal/cli
+              desc: internal/cli is cobra wiring only and sits on top
+        watch-standalone:
+          files:
+            - "**/internal/watch/**"
+          deny:
+            - pkg: github.com/ryckakas/crashcause/internal/inspect
+              desc: inspect and watch are independent driving modes
+            - pkg: github.com/ryckakas/crashcause/internal/cli
+              desc: internal/cli is cobra wiring only and sits on top
+
   exclusions:
     rules:
       # Test files: relax noise-prone checks that don't pay for themselves
       # in test code (unchecked errors on cleanup, permissive test fixtures,
-      # unused parameters in table-driven test helpers).
+      # unused parameters in table-driven test helpers, and unchecked type
+      # assertions, whose panic fails the test with a clear stack trace).
       - path: _test\.go
         linters:
           - errcheck
+          - forcetypeassert
           - gosec
           - unparam
 
