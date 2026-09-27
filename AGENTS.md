@@ -18,7 +18,9 @@ and Prometheus metric labels) — never rename, renumber, or repurpose one; see 
 
 ## Commands
 
-Build requires Go 1.25 (`toolchain go1.25.0` pinned in `go.mod`; any Go ≥ 1.21 auto-downloads it).
+Build requires Go 1.26 (`toolchain go1.26.8` pinned in `go.mod`; any Go ≥ 1.21 auto-downloads it).
+CI, release builds, and govulncheck all run that pinned toolchain, so a govulncheck failure on a
+standard-library advisory is fixed by bumping the `toolchain` line to the patched release.
 The Makefile targets assume a Linux/bash-style shell (this is what CI runs) — on Windows use Git
 Bash or WSL for `make`, or run the underlying `go`/`golangci-lint` commands directly.
 
@@ -30,7 +32,8 @@ make cover          # race + coverage.out + go tool cover -func
 make fmt            # gofumpt -w . && goimports -w .   (requires gofumpt, goimports)
 make lint           # golangci-lint run                (requires golangci-lint v2)
 make shellcheck     # shellcheck -x on every tracked *.sh  (requires shellcheck)
-make check          # what CI gates on: lint, shellcheck, race, go vet, govulncheck
+make zizmor         # audit .github/ workflows + dependabot.yml (requires zizmor)
+make check          # what CI gates on: lint, shellcheck, zizmor, race, go vet, govulncheck
 make helm-lint       # helm lint + template, asserts pods/log RBAC is present/absent correctly
 make e2e            # kind-based end-to-end run (requires kind, kubectl, jq) — see hack/e2e.sh
 ```
@@ -44,8 +47,10 @@ go test -race -run TestName ./internal/collect/...
 ```
 
 `make check` is what CI actually gates on for the `lint`/`test`/`build`/`govulncheck`/`shellcheck`/
-`helm` jobs (see `.github/workflows/ci.yml`); `e2e-kind` in CI is best-effort/non-gating. Run
-`make check` before considering a change done. golangci-lint config (`.golangci.yml`) enables `exhaustive`
+`zizmor`/`helm` jobs (see `.github/workflows/ci.yml`); `e2e-kind` in CI is best-effort/non-gating.
+Run `make check` before considering a change done. Every `uses:` in `.github/workflows/` is pinned
+to a full commit SHA with a `# vX.Y.Z` comment (Dependabot updates both); zizmor fails CI on a
+tag or branch ref. golangci-lint config (`.golangci.yml`) enables `exhaustive`
 switch-checking specifically over `engine.CauseCode` with `default-signifies-exhaustive: false` —
 **adding a new CauseCode will force-fail every `switch` over CauseCode that doesn't handle it**,
 by design. Bare `//nolint` (no reason comment) is a lint failure, not just a style nit.

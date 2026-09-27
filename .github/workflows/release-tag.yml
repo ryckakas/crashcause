@@ -34,8 +34,8 @@ jobs:
           fi
 
       # fetch-depth 0 brings the existing tags along for the re-run guard.
-      - uses: actions/checkout@v7.0.1
-        with:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: # zizmor: ignore[artipacked] the tag push below authenticates with this persisted RELEASE_PAT, and no artifact is uploaded
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PAT }}
