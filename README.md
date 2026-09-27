@@ -396,7 +396,7 @@ downloads it automatically. The full check loop also needs **golangci-lint v2**,
 **zizmor**, **helm** and **kind**.
 
 ```sh
-make fmt lint test race cover build e2e helm-lint check
+make fmt lint complexity test race cover build e2e helm-lint check
 ```
 
 `make check` runs what CI gates on, so green locally should mean green in CI.

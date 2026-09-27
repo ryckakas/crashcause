@@ -35,6 +35,12 @@ jobs:
         with:
           version: v2.12.2
 
+      # Version pinned by the `tool` line in go.mod; thresholds and the
+      # accepted-findings baseline live in bonsai-lint.toml and
+      # .bonsai-lint-baseline.json.
+      - name: Cognitive complexity (bonsai-lint)
+        run: make complexity
+
   # --- test: required, genuinely gating -------------------------------------
   test:
     name: Test
