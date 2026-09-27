@@ -236,16 +236,12 @@ default_serviceaccount_exists() {
 apply_manifests() {
   info "applying demo manifests from examples/kind-demo/"
 
-  # A pod created while the node still carries its not-ready taint gets a
-  # FailedScheduling event that outlives the taint, and crashcause would then
-  # report the stuck-init scenario as unschedulable.
+  # kind create cluster returns before the node is Ready.
   kubectl wait --for=condition=Ready nodes --all --timeout="${TIMEOUT}s"
 
   # The namespace has to exist before the workloads that name it.
   kubectl apply -f "${MANIFEST_DIR}/namespace.yaml"
-  # The API server rejects pods in a brand-new namespace until the
-  # service-account controller has created its "default" ServiceAccount,
-  # which happens asynchronously a moment after the namespace appears.
+  # Pods are rejected until the namespace's default ServiceAccount exists.
   wait_until "the default ServiceAccount in ${NAMESPACE}" default_serviceaccount_exists
 
   # kind-config.yaml is a kind Cluster config, NOT a Kubernetes object:

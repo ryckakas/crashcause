@@ -59,6 +59,9 @@ type crashedAppInputs struct {
 
 func (f crashedAppInputs) identity(t *testing.T) {
 	in := f.in
+	if in.NodeName != testNodeName {
+		t.Errorf("NodeName = %q, want %q", in.NodeName, testNodeName)
+	}
 	if in.Pod != testPodName || in.Namespace != testNamespace || in.Container != testContainer {
 		t.Errorf("identity = %s/%s/%s", in.Namespace, in.Pod, in.Container)
 	}
@@ -269,6 +272,9 @@ func TestPendingUnschedulablePod(t *testing.T) {
 	in := got[0]
 	if in.PodPhase != string(corev1.PodPending) {
 		t.Errorf("PodPhase = %q, want Pending", in.PodPhase)
+	}
+	if in.NodeName != "" {
+		t.Errorf("NodeName = %q, want empty for a pod the scheduler never bound", in.NodeName)
 	}
 	if in.Container != testContainer {
 		t.Errorf("Container = %q, want the first spec container %q", in.Container, testContainer)

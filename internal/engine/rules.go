@@ -1064,6 +1064,10 @@ func unschedulableRule() Rule {
 		Cause:     CauseUnschedulable,
 		AppliesTo: allKinds(),
 		Match: func(in Inputs) *Diagnosis {
+			// FailedScheduling events outlive the bind by up to an hour.
+			if in.NodeName != "" {
+				return nil
+			}
 			evs := schedulingEvents(in)
 			if len(evs) == 0 {
 				return nil
