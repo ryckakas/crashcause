@@ -432,13 +432,8 @@ func pullFailureCandidates(in Inputs, waitingPull bool) []string {
 	return candidates
 }
 
-// mostInformativePullMessage exists because the event message is normally far
-// richer than the waiting message, but one pull failure produces several
-// events ("Failed to pull image ...: not found", "Error: ErrImagePull",
-// "Error: ImagePullBackOff") that often share a one-second-granularity
-// timestamp, so the sort order between them is arbitrary. Taking the first
-// match would let a bare "Error: ErrImagePull" shadow the message that
-// actually carries the auth/not-found detail.
+// One pull failure yields several same-second events in arbitrary order, so a bare
+// "Error: ErrImagePull" must not shadow the one carrying the auth/not-found detail.
 func mostInformativePullMessage(candidates []string) string {
 	best, bestScore := "", -1
 	for _, msg := range candidates {

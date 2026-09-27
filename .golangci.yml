@@ -1,15 +1,9 @@
 # golangci-lint v2 configuration.
 #
-# Policy: every `//nolint` directive names its linter and carries a reason
-# comment (e.g. `//nolint:errcheck // response body close is best-effort
-# here`). nolintlint enforces this, and also flags directives that no longer
-# suppress anything.
-#
 # Schema reference: https://golangci-lint.run/docs/configuration/file/
 version: "2"
 
-# Report every finding instead of golangci-lint's default 50-per-linter /
-# 3-identical caps, which hide how much a newly enabled linter would flag.
+# The default caps hide how much a newly enabled linter flags.
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
@@ -91,10 +85,7 @@ linters:
       require-explanation: true
       require-specific: true
 
-    # Enforces the layer order documented in AGENTS.md § Architecture: each
-    # layer depends only on the ones below it, and internal/engine stays
-    # pure (no k8s.io, filesystem, or network) so it is testable without a
-    # cluster.
+    # The layer order from AGENTS.md § Architecture; internal/engine stays pure.
     depguard:
       rules:
         engine-pure:
@@ -154,10 +145,8 @@ linters:
 
   exclusions:
     rules:
-      # Test files: relax noise-prone checks that don't pay for themselves
-      # in test code (unchecked errors on cleanup, permissive test fixtures,
-      # unused parameters in table-driven test helpers, and unchecked type
-      # assertions, whose panic fails the test with a clear stack trace).
+      # Noise in tests: cleanup errors, permissive fixtures, unused helper
+      # parameters, and type assertions whose panic already fails the test.
       - path: _test\.go
         linters:
           - errcheck

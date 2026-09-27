@@ -35,9 +35,7 @@ jobs:
         with:
           version: v2.14.0
 
-      # Version pinned by the `tool` line in go.mod; thresholds and the
-      # accepted-findings baseline live in bonsai-lint.toml and
-      # .bonsai-lint-baseline.json.
+      # Version pinned by the `tool` line in go.mod.
       - name: Cognitive complexity (bonsai-lint)
         run: make complexity
 
@@ -131,10 +129,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # Installed directly instead of through golang/govulncheck-action, which
-      # runs its own checkout that persists the job token into .git/config and
-      # installs govulncheck@latest, so a scanner release could change results
-      # with no change in this repo.
+      # Not govulncheck-action: it persists the job token and installs @latest.
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
@@ -142,9 +137,7 @@ jobs:
         run: govulncheck ./...
 
   # --- shellcheck: required, genuinely gating -------------------------------
-  # Pinned (version + archive checksum) instead of the runner's preinstalled
-  # shellcheck, whose version moves with the ubuntu-latest image and would
-  # let findings appear or vanish without any change in this repo.
+  # Pinned: the runner's preinstalled shellcheck changes with the image.
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
@@ -171,10 +164,7 @@ jobs:
         run: make shellcheck
 
   # --- zizmor: required, genuinely gating -----------------------------------
-  # Audits the workflows and dependabot.yml at zizmor's default severity and
-  # confidence, so any new finding fails. --offline keeps results
-  # deterministic and needs no token. The image is pinned by digest because
-  # Dependabot does not track an image referenced from a `run:` step.
+  # Image pinned by digest: Dependabot doesn't track images in `run:` steps.
   zizmor:
     name: zizmor
     runs-on: ubuntu-latest

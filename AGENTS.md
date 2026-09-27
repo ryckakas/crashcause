@@ -128,19 +128,14 @@ severability will fail loudly.
 
 ## Comments
 
-No comments, strictly, on hand-written code. Names and small functions carry the meaning; if a
-comment feels needed, that's usually a sign the code should be restructured or renamed instead.
+The owner's rule: no comment unless it explains why, and none longer than 3 lines.
 
-Two narrow exceptions:
-
-- **Auto-generated code** (mocks, protobuf/codegen output, etc.) is exempt — leave whatever the
-  generator produces alone.
-- **"Why" comments**, only when absolutely necessary: a non-obvious invariant, a workaround for a
-  specific upstream bug/quirk, or a constraint that isn't visible at the call site. Never a "what"
-  comment restating what the code already says. This repo's existing doc comments on exported
-  package/type/rule identifiers (e.g. `internal/engine`'s package doc, `Rule`, `Rules()`) are this
-  kind of load-bearing "why", not restatement — keep that standard, don't add narration on top of
-  it.
+- A "why" is a non-obvious invariant, a workaround for a specific upstream quirk, or a constraint
+  not visible at the call site. Never restate the code; try a better name or a smaller function
+  first.
+- It applies to Go, shell, YAML and the Makefile alike. Auto-generated code is exempt.
+- When a change makes a comment's reasoning untrue, fix or delete the comment in the same change.
+  Older comments that break the rule get trimmed when their code is next touched.
 
 ## Testing conventions
 
