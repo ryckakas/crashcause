@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -161,6 +162,35 @@ func TestRulesTableIsCompleteAndOrdered(t *testing.T) {
 			t.Errorf("cause %s appears %d times in the rule table, want 1", c, seen[c])
 		}
 	}
+}
+
+func TestCauseCodeStringsNeverChange(t *testing.T) {
+	want := []string{
+		"app_exit_nonzero",
+		"completed_restart_loop",
+		"config_missing_reference",
+		"evicted",
+		"image_pull_auth",
+		"image_pull_not_found",
+		"image_pull_other",
+		"init_container_failure",
+		"init_container_stuck",
+		"oom_killed",
+		"probe_liveness_failure",
+		"probe_startup_failure",
+		"security_context_violation",
+		"sigkill_after_grace",
+		"sigkill_unattributed",
+		"unknown",
+		"unschedulable",
+		"volume_mount_failure",
+	}
+	got := make([]string, 0, len(want))
+	for _, c := range AllCauses() {
+		got = append(got, string(c))
+	}
+	slices.Sort(got)
+	htAssertStrings(t, "released cause codes (rename or remove none; add new ones here)", got, want)
 }
 
 func TestAppOnlyRulesNeverApplyToInitContainers(t *testing.T) {
