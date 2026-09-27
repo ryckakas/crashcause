@@ -155,9 +155,7 @@ type lokiSink struct {
 	quit chan struct{}
 	done chan struct{}
 
-	// baseCancel cancels the context that run's pushes derive from. Close
-	// calls it when the caller's context expires, so an in-flight push cannot
-	// outlive Close and leak the goroutine.
+	// Close calls this so an in-flight push cannot outlive it.
 	baseCancel context.CancelFunc
 
 	closeOnce sync.Once
