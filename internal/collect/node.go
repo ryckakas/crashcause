@@ -35,7 +35,9 @@ func (c *Collector) nodeConditions(ctx context.Context, nodeName string) engine.
 			out.DiskPressure = true
 		case corev1.NodePIDPressure:
 			out.PIDPressure = true
-		case corev1.NodeReady, corev1.NodeNetworkUnavailable:
+		case corev1.NodeReady, corev1.NodeNetworkUnavailable,
+			corev1.NodeGracefulNodeShutdownInProgress, corev1.NodeDrainInProgress, corev1.NodeDrained,
+			corev1.NodeMaintenancePlanned, corev1.NodeMaintenanceInProgress:
 			// Not a pressure condition; nothing to record.
 		}
 	}
