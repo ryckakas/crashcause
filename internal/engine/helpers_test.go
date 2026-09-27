@@ -1681,7 +1681,7 @@ func htContainsSubstr(lines []string, want string) bool {
 
 // TestHTScanLogTailDNSAndPythonPatterns covers the two patterns added after a
 // live-cluster run produced "no known crash pattern matched the log tail" for
-// a Python service whose DNS lookup failed — the single most common shape of
+// a Python service whose DNS lookup failed, the single most common shape of
 // dependency failure in a cluster.
 func TestHTScanLogTailDNSAndPythonPatterns(t *testing.T) {
 	dnsCases := map[string]string{

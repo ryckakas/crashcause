@@ -48,7 +48,7 @@ pod and prints a classified crash diagnosis.`,
 	opts.ai.addAIFlags(fs)
 
 	// Namespace, kubeconfig, and context flags (-n/--namespace, --kubeconfig,
-	// --context, etc.) come from genericclioptions.ConfigFlags below — do not
+	// --context, etc.) come from genericclioptions.ConfigFlags below; do not
 	// define a competing -n/--namespace flag here.
 	opts.configFlags.AddFlags(fs)
 

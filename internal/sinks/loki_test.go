@@ -465,7 +465,7 @@ func TestLokiEmitNeverBlocksAndDropsOnFullBuffer(t *testing.T) {
 	}
 
 	// The property under test is that Emit returns instead of waiting for the
-	// wedged flusher — which stays wedged for the rest of the test, so a
+	// wedged flusher, which stays wedged for the rest of the test, so a
 	// blocking Emit would hang indefinitely. Assert that with a watchdog on
 	// the whole batch rather than a per-call latency bound: a non-blocking
 	// channel send can still be descheduled for 100ms+ when the race detector

@@ -352,7 +352,7 @@ var (
 		`(?i)(not found|manifest unknown|does not exist|no such host.*manifest)`)
 
 	// The kubelet's verifyRunAsNonRoot rejections plus the runAsUser policy
-	// check — deliberately tight so generic "permission denied" never matches.
+	// check, deliberately tight so generic "permission denied" never matches.
 	reSecurityContextViolation = regexp.MustCompile(
 		`(?i)(container has runAsNonRoot|runAsUser breaks non-root policy)`)
 
@@ -383,7 +383,7 @@ func imagePullContext(in Inputs) (string, bool) {
 	// A failure-family waiting reason outside the pull set
 	// (CreateContainerConfigError, CrashLoopBackOff, ...) positively identifies
 	// a NON-pull failure: the kubelet got past pulling and failed later. Event
-	// scavenging below must not run then — a generic Failed event whose message
+	// scavenging below must not run then: a generic Failed event whose message
 	// merely contains the word "image" ("container has runAsNonRoot and image
 	// will run as root") would arm the pull family (issue #17). Neutral reasons
 	// (ContainerCreating, PodInitializing) carry no such signal, so they still

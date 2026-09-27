@@ -13,7 +13,7 @@ import (
 
 // header is the exact separator the human renderer puts between the "<ns>/<pod>
 // container <name>" identity and the cause: see renderContainer in render.go.
-const headerSep = " — "
+const headerSep = ": "
 
 func TestRunOOMKilledPodHuman(t *testing.T) {
 	now := time.Now()
@@ -94,17 +94,17 @@ func TestRunOOMKilledPodJSON(t *testing.T) {
 
 // Fixture (probeFailurePod): a currently-Running app container with a
 // harmless exit-0 LAST termination (RestartCount>0, RestartPolicy OnFailure
-// so completed_restart_loop does not also fire — see the fixture's comment
+// so completed_restart_loop does not also fire; see the fixture's comment
 // for why the collector needs *some* terminated state to even hand the
-// container to the engine), plus two Unhealthy events — one mentioning
-// "Liveness", one mentioning "Startup" — and one "Killing" event.
+// container to the engine), plus two Unhealthy events (one mentioning
+// "Liveness", one mentioning "Startup") and one "Killing" event.
 //
 // Per internal/engine/rules.go:
 //   - probeLivenessRule matches on livenessProbeContext: Unhealthy+"Liveness"
 //     events non-empty, and (Killing events non-empty OR RestartCount>0).
 //   - probeStartupRule matches on the equivalent startupProbeContext.
 //   - Neither rule excludes the other (unlike sigkill_unattributed, which
-//     probeKillMatched suppresses whenever a probe kill is attributable — the
+//     probeKillMatched suppresses whenever a probe kill is attributable; the
 //     rules-doc-suggested "exit 137 + liveness Unhealthy/Killing" combination
 //     does NOT yield two diagnoses because that combination makes
 //     probeKillMatched true, which is exactly the condition that turns off

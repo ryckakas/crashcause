@@ -7,7 +7,7 @@
 # (Docker Hub) and a real repository (busybox), but a tag that does not
 # exist. This produces `ErrImagePull` followed by `ImagePullBackOff` in
 # `waiting.reason`, with an event message containing "not found" / "manifest
-# unknown" — distinct from a bogus registry host, which would instead
+# unknown", distinct from a bogus registry host, which would instead
 # produce a DNS/timeout error mapping to a different cause. imagePullPolicy
 # is set to Always so a locally cached image can never mask the failure.
 #

@@ -144,7 +144,7 @@ The report leads with the evidence: cause, confidence, a plain explanation, evid
 next steps. This one illustrates the format rather than transcribing a real run:
 
 ```text
-crashcause-demo/oom-demo container app — oom_killed (high confidence)
+crashcause-demo/oom-demo container app: oom_killed (high confidence)
 
   Container was OOM-killed: last termination reason was OOMKilled with exit code 137.
   Memory limit was 16Mi.

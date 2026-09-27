@@ -1,6 +1,6 @@
 {
   "uid": "crashcause",
-  "title": "crashcause — Kubernetes crash causes",
+  "title": "crashcause: Kubernetes crash causes",
   "description": "Overview of crashcause's classified Kubernetes crash diagnoses and pod-log rate-limiter health. Requires crashcause running in watch mode with --metrics-addr set (e.g. --metrics-addr :9090) and a Prometheus scrape job pointed at that /metrics endpoint. crashcause exposes exactly two metrics: crashcause_diagnoses_total{namespace,owner_kind,owner_name,cause} and crashcause_log_fetches_skipped_total (no labels).",
   "tags": ["crashcause", "kubernetes"],
   "schemaVersion": 39,

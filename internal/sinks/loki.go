@@ -52,8 +52,8 @@ var errLokiPushRejected = errors.New("sinks: loki rejected push")
 
 // Environment variables read once, at NewLoki time, for authentication.
 //
-// Credentials are taken from the environment ONLY — never from LokiConfig,
-// never from CLI flags — so they cannot end up in shell history, in a
+// Credentials are taken from the environment ONLY (never from LokiConfig,
+// never from CLI flags), so they cannot end up in shell history, in a
 // serialized config, or in this process's own diagnostic output.
 const (
 	lokiEnvUsername = "LOKI_USERNAME"
@@ -215,7 +215,7 @@ func NewLoki(cfg LokiConfig) (Sink, error) {
 
 	// Buffer capacity: ten batches, with a floor. Big enough to ride out a
 	// slow push, small enough that a dead Loki cannot grow memory without
-	// bound — past this point Emit drops rather than blocks.
+	// bound. Past this point Emit drops rather than blocks.
 	bufCap := batchSize * 10
 	if bufCap < lokiMinBufferCap {
 		bufCap = lokiMinBufferCap
@@ -501,7 +501,7 @@ func (s *lokiSink) push(ctx context.Context, body []byte) error {
 // (namespace, cause) pair, preserving emission order inside each stream.
 //
 // The label set is EXACTLY {app, namespace, cause} and nothing else. Loki
-// indexes labels, so every additional label multiplies stream cardinality —
+// indexes labels, so every additional label multiplies stream cardinality;
 // pod names, confidence and AI text are high-cardinality and stay in the log
 // line, where they are still searchable but not indexed.
 func lokiEncodeBatch(batch []lokiEntry) ([]byte, error) {

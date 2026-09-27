@@ -32,8 +32,8 @@ var clusterFailureMarkers = []struct {
 
 // explainClusterFailure rewrites "could not reach or authenticate to the API
 // server" errors into a line an operator can act on, naming the server when it
-// is known. Anything else — a missing pod, a bad option, an API error unrelated
-// to connectivity — is returned untouched.
+// is known. Anything else (a missing pod, a bad option, an API error unrelated
+// to connectivity) is returned untouched.
 //
 // The original error stays wrapped: the raw client-go detail is the only thing
 // that distinguishes, say, one broken credential plugin from another.
@@ -46,7 +46,7 @@ func explainClusterFailure(err error, server string) error {
 	if server != "" {
 		subject = "cluster " + server
 	}
-	return fmt.Errorf("cannot reach or authenticate to %s: %s — %s: %w", subject, reason, clusterAdvice, err)
+	return fmt.Errorf("cannot reach or authenticate to %s: %s; %s: %w", subject, reason, clusterAdvice, err)
 }
 
 func clusterFailureReason(err error) (string, bool) {

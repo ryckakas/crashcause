@@ -4,8 +4,8 @@
 #
 # Nothing here is a write verb. Nothing here reads Secrets or ConfigMaps.
 # The one privilege that can see workload *contents* rather than metadata is
-# the container log read, and it is templated out of existence — not merely
-# switched off in config — by logCollection.enabled=false.
+# the container log read, and it is templated out of existence (not merely
+# switched off in config) by logCollection.enabled=false.
 #
 # See charts/crashcause/README.md for the per-permission table: what it is
 # for, what removing it costs you, and how to remove it.

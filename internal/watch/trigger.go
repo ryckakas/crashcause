@@ -11,8 +11,8 @@ import (
 // waitingReasonsWarrantingDiagnosis mirrors the set the collector uses: the
 // exact state.waiting reasons that are worth an API round trip on their own.
 // It is duplicated here (rather than imported) because collect keeps it
-// unexported, and because this copy answers a different question — "is this
-// update worth collecting for?" — which must be answerable without any I/O.
+// unexported, and because this copy answers a different question ("is this
+// update worth collecting for?"), which must be answerable without any I/O.
 var waitingReasonsWarrantingDiagnosis = map[string]bool{
 	"CrashLoopBackOff":           true,
 	"ImagePullBackOff":           true,

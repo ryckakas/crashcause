@@ -99,7 +99,7 @@ func NewPrometheus(reg prometheus.Registerer) *Prometheus {
 //     strip the auto-generated run-specific suffix: first a trailing
 //     all-digit segment (CronJob-style, in case CronJobName wasn't
 //     populated), then a trailing 5-char generateName-style segment.
-//     This is a heuristic, not a guarantee — it recognizes the two
+//     This is a heuristic, not a guarantee: it recognizes the two
 //     conventions Kubernetes itself uses, nothing more.
 //  3. Anything else (Deployment, StatefulSet, DaemonSet, ReplicaSet, ...)
 //     passes through unchanged.
@@ -138,8 +138,8 @@ type SeriesKey struct {
 }
 
 // SeriesKeyFor returns the series identity IncCrash and ForgetSeries map an
-// Owner to. Distinct owners can share one key — normalizeOwner folds every
-// run Job of one CronJob into a single series — so callers deciding whether
+// Owner to. Distinct owners can share one key (normalizeOwner folds every
+// run Job of one CronJob into a single series), so callers deciding whether
 // to ForgetSeries must first check that no other live workload has the same
 // key.
 func SeriesKeyFor(namespace string, owner engine.Owner) SeriesKey {
@@ -150,7 +150,7 @@ func SeriesKeyFor(namespace string, owner engine.Owner) SeriesKey {
 // IncCrash increments crashcause_diagnoses_total for one observed crash.
 //
 // This must be called on EVERY crash the tool observes, independent of
-// whatever dedup logic gates the log-style sinks (stdout/Loki) — the counter
+// whatever dedup logic gates the log-style sinks (stdout/Loki): the counter
 // exists precisely to answer "how many times has this actually crashed",
 // which dedup'd log lines cannot answer on their own.
 func (p *Prometheus) IncCrash(namespace string, owner engine.Owner, cause engine.CauseCode) {
@@ -164,8 +164,8 @@ func (p *Prometheus) IncCrash(namespace string, owner engine.Owner, cause engine
 // every workload that ever existed. Callers invoke this on dedup-cache TTL
 // expiry or workload deletion.
 //
-// Deletion matches only on namespace/owner_kind/owner_name — deliberately
-// not on cause — so all cause series for the workload are forgotten
+// Deletion matches only on namespace/owner_kind/owner_name (deliberately
+// not on cause), so all cause series for the workload are forgotten
 // together, not just whichever cause happened to be last observed.
 //
 // The same normalizeOwner heuristic used by IncCrash is applied here, so a

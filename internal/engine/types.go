@@ -4,7 +4,7 @@
 // access, no network access. It consumes a fully-populated Inputs value
 // (assembled by collectors elsewhere in the program) and produces zero or
 // more Diagnosis values. Because it is pure, it must never import any
-// k8s.io package — collectors translate Kubernetes objects into the plain
+// k8s.io package: collectors translate Kubernetes objects into the plain
 // Go types declared here, and this package classifies those plain types.
 package engine
 

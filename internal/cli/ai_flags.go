@@ -14,7 +14,7 @@ import (
 	"github.com/ryckakas/crashcause/internal/ai"
 )
 
-// apiKeyEnv is the only place the AI API key is ever read from — never a
+// apiKeyEnv is the only place the AI API key is ever read from, never a
 // flag (ps leakage) and never logged.
 const apiKeyEnv = "CRASHCAUSE_AI_API_KEY"
 
@@ -43,7 +43,7 @@ func (o *aiOptions) addAIFlags(fs *pflag.FlagSet) {
 // firstUseNotice is the honesty requirement from the spec: printed to stderr
 // once per invocation whenever AI summarization is enabled.
 const firstUseNotice = "crashcause: AI summarization is enabled. Redaction is best-effort pattern " +
-	"matching, NOT a guarantee — do not enable AI on workloads whose logs may " +
+	"matching, NOT a guarantee. Do not enable AI on workloads whose logs may " +
 	"contain secrets you cannot afford to send. See the docs for the full pattern list."
 
 // buildSummarizer turns the parsed AI flags into a ready ai.Summarizer, or

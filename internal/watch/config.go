@@ -6,13 +6,13 @@
 // The package owns three pieces of policy that the rest of the tool
 // deliberately does not know about:
 //
-//   - trigger detection — which pod updates are worth an API round trip at all
+//   - trigger detection: which pod updates are worth an API round trip at all
 //     (a fingerprint of per-container restart counts and state kinds, so the
 //     same observed state never causes collection twice);
-//   - emission dedup — the workload-keyed cache from decision log entry 2,
+//   - emission dedup: the workload-keyed cache from decision log entry 2,
 //     which keeps a crashlooping workload from writing a log line every
 //     backoff cycle while the Prometheus counter still counts every crash;
-//   - the runtime — informers, leader election, health/metrics endpoints and
+//   - the runtime: informers, leader election, health/metrics endpoints and
 //     graceful shutdown.
 package watch
 

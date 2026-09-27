@@ -124,7 +124,7 @@ func healthyPod(t *testing.T, now time.Time) *corev1.Pod {
 
 // appExitStatus is a container status that trips ONLY engine.CauseAppExitNonzero:
 // a plain exit code 1 with reason "Error", no OOMKilled reason, no signal, no
-// probe/image/eviction/config/volume signal of any kind — the AI gate (spec
+// probe/image/eviction/config/volume signal of any kind. The AI gate (spec
 // §6) only opens for app_exit_nonzero and unknown.
 func appExitStatus(name string, now time.Time) corev1.ContainerStatus {
 	return corev1.ContainerStatus{
@@ -158,7 +158,7 @@ func appExitPod(t *testing.T, now time.Time) *corev1.Pod {
 
 // probeFailurePod is currently running, but warrants diagnosis (per
 // collect.warrantsDiagnosis) because of a harmless exit-0 LAST termination
-// with a nonzero restart count — a plain "currently Running, RestartCount>0"
+// with a nonzero restart count: a plain "currently Running, RestartCount>0"
 // status is invisible to the collector, since it only looks at
 // State.Terminated / LastTerminationState.Terminated / Waiting. RestartPolicy
 // is deliberately NOT "Always", so the exit-0 last termination does not also
@@ -221,8 +221,8 @@ func multiContainerCrashedPod(t *testing.T, now time.Time) *corev1.Pod {
 
 // fakeProvider is a minimal ai.Provider for tests: it records every request it
 // receives and returns a canned summary or a canned error. If failIfCalled is
-// set, Summarize fails the test outright — used to prove the AI gate is
-// closed for non-eligible causes (the provider must never be invoked).
+// set, Summarize fails the test outright, which is used to prove the AI gate
+// is closed for non-eligible causes (the provider must never be invoked).
 type fakeProvider struct {
 	summary      string
 	err          error

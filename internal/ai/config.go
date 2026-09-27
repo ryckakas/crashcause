@@ -61,7 +61,7 @@ var (
 // Config describes an AI provider client.
 //
 // APIKey is supplied by the CALLER, which reads it from the
-// CRASHCAUSE_AI_API_KEY environment variable — never from a flag (ps leakage)
+// CRASHCAUSE_AI_API_KEY environment variable, never from a flag (ps leakage)
 // and never from a config file. It is used only as a request header: it is
 // never logged and never appears in an error returned by this package.
 type Config struct {

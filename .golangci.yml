@@ -10,7 +10,7 @@ issues:
 
 linters:
   # Start from nothing and enable exactly the linters we want, rather than
-  # inheriting golangci-lint's "standard" default set — this keeps the
+  # inheriting golangci-lint's "standard" default set; this keeps the
   # enabled set an explicit, reviewable list.
   default: none
 
@@ -70,7 +70,7 @@ linters:
       check:
         - switch
       # A `default:` case must NOT be treated as covering missing cause
-      # codes — we want new CauseCode values to force every switch to be
+      # codes: we want new CauseCode values to force every switch to be
       # updated, not silently fall through to default.
       default-signifies-exhaustive: false
       # Require every enum member to appear in every switch over CauseCode,
