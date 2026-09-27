@@ -733,71 +733,79 @@ func configMissingRefRule() Rule {
 				conf = ConfidenceHigh
 			}
 			d := newDiagnosis(in, CauseConfigMissingRef, conf)
-			switch {
-			case parsed && ref.Key != "" && ref.Name != "":
-				d.Explanation = fmt.Sprintf(
-					"The kubelet could not create %s because it references key %q of %s %q, and that key does not exist. "+
-						"The container never started: this is a configuration error, not an application crash.",
-					containerRef(in), ref.Key, ref.Kind, ref.Name)
-			case parsed && ref.Name != "":
-				d.Explanation = fmt.Sprintf(
-					"The kubelet could not create %s because it references %s %q, which does not exist in namespace %q. "+
-						"The container never started: this is a configuration error, not an application crash.",
-					containerRef(in), ref.Kind, ref.Name, in.Namespace)
-			case parsed && ref.Key != "":
-				d.Explanation = fmt.Sprintf(
-					"The kubelet could not create %s because it references a non-existent %s key %q. "+
-						"The container never started: this is a configuration error, not an application crash.",
-					containerRef(in), ref.Kind, ref.Key)
-			default:
-				d.Explanation = fmt.Sprintf(
-					"The kubelet could not create %s: it rejected the container's configuration, most commonly because "+
-						"a referenced ConfigMap, Secret or key could not be resolved. The kubelet message in the evidence "+
-						"below states the actual rejection. The container never started.",
-					containerRef(in))
-			}
-
-			if in.Waiting.Present && in.Waiting.Reason != "" {
-				appendEvidence(d, "waiting reason: "+in.Waiting.Reason)
-			}
-			if m := truncateMessage(msg); m != "" {
-				appendEvidence(d, "kubelet message: "+m)
-			}
-			if parsed {
-				if ref.Name != "" {
-					appendEvidence(d, fmt.Sprintf("missing reference: %s %q", ref.Kind, ref.Name))
-				}
-				if ref.Key != "" {
-					appendEvidence(d, fmt.Sprintf("missing key: %q", ref.Key))
-				}
-			}
-			for _, e := range eventsByReason(in, "Failed") {
-				appendEvidence(d, describeEvent(e))
-			}
-			appendEvidence(d, restartEvidence(in)...)
-
-			resource := kubectlResource(ref.Kind)
-			if parsed && ref.Name != "" {
-				appendSteps(d,
-					fmt.Sprintf("kubectl get %s %s %s", resource, ref.Name, nsFlag(in)),
-					fmt.Sprintf("kubectl describe %s %s %s    # confirm the expected keys exist", resource, ref.Name, nsFlag(in)),
-				)
-				if ref.Key != "" {
-					appendSteps(d, fmt.Sprintf("kubectl get %s %s %s -o jsonpath='{.data.%s}'",
-						resource, ref.Name, nsFlag(in), ref.Key))
-				}
-				appendSteps(d, fmt.Sprintf("If the %s is created by another controller (external-secrets, sealed-secrets, "+
-					"a Helm hook), check that it reconciled before this pod was scheduled", ref.Kind))
-			} else {
-				appendSteps(d,
-					"kubectl get configmap,secret "+nsFlag(in)+"    # compare against envFrom / valueFrom / volume references",
-					describeCommand(in)+"    # the Events section names the missing object",
-				)
-			}
+			d.Explanation = missingRefExplanation(in, ref, parsed)
+			appendEvidence(d, missingRefEvidence(in, msg, ref, parsed)...)
+			appendSteps(d, missingRefSteps(in, ref, parsed)...)
 			appendSteps(d, "Check for a namespace mismatch: ConfigMaps and Secrets are not shared across namespaces")
 			return d
 		},
 	}
+}
+
+func missingRefExplanation(in Inputs, ref missingReference, parsed bool) string {
+	switch {
+	case parsed && ref.Key != "" && ref.Name != "":
+		return fmt.Sprintf(
+			"The kubelet could not create %s because it references key %q of %s %q, and that key does not exist. "+
+				"The container never started: this is a configuration error, not an application crash.",
+			containerRef(in), ref.Key, ref.Kind, ref.Name)
+	case parsed && ref.Name != "":
+		return fmt.Sprintf(
+			"The kubelet could not create %s because it references %s %q, which does not exist in namespace %q. "+
+				"The container never started: this is a configuration error, not an application crash.",
+			containerRef(in), ref.Kind, ref.Name, in.Namespace)
+	case parsed && ref.Key != "":
+		return fmt.Sprintf(
+			"The kubelet could not create %s because it references a non-existent %s key %q. "+
+				"The container never started: this is a configuration error, not an application crash.",
+			containerRef(in), ref.Kind, ref.Key)
+	default:
+		return fmt.Sprintf(
+			"The kubelet could not create %s: it rejected the container's configuration, most commonly because "+
+				"a referenced ConfigMap, Secret or key could not be resolved. The kubelet message in the evidence "+
+				"below states the actual rejection. The container never started.",
+			containerRef(in))
+	}
+}
+
+func missingRefEvidence(in Inputs, msg string, ref missingReference, parsed bool) []string {
+	var ev []string
+	if in.Waiting.Present && in.Waiting.Reason != "" {
+		ev = append(ev, "waiting reason: "+in.Waiting.Reason)
+	}
+	if m := truncateMessage(msg); m != "" {
+		ev = append(ev, "kubelet message: "+m)
+	}
+	if parsed && ref.Name != "" {
+		ev = append(ev, fmt.Sprintf("missing reference: %s %q", ref.Kind, ref.Name))
+	}
+	if parsed && ref.Key != "" {
+		ev = append(ev, fmt.Sprintf("missing key: %q", ref.Key))
+	}
+	for _, e := range eventsByReason(in, "Failed") {
+		ev = append(ev, describeEvent(e))
+	}
+	return append(ev, restartEvidence(in)...)
+}
+
+func missingRefSteps(in Inputs, ref missingReference, parsed bool) []string {
+	if !parsed || ref.Name == "" {
+		return []string{
+			"kubectl get configmap,secret " + nsFlag(in) + "    # compare against envFrom / valueFrom / volume references",
+			describeCommand(in) + "    # the Events section names the missing object",
+		}
+	}
+	resource := kubectlResource(ref.Kind)
+	steps := []string{
+		fmt.Sprintf("kubectl get %s %s %s", resource, ref.Name, nsFlag(in)),
+		fmt.Sprintf("kubectl describe %s %s %s    # confirm the expected keys exist", resource, ref.Name, nsFlag(in)),
+	}
+	if ref.Key != "" {
+		steps = append(steps, fmt.Sprintf("kubectl get %s %s %s -o jsonpath='{.data.%s}'",
+			resource, ref.Name, nsFlag(in), ref.Key))
+	}
+	return append(steps, fmt.Sprintf("If the %s is created by another controller (external-secrets, sealed-secrets, "+
+		"a Helm hook), check that it reconciled before this pod was scheduled", ref.Kind))
 }
 
 // ---------------------------------------------------------------------------
@@ -1124,108 +1132,143 @@ func appExitNonzeroRule() Rule {
 			if kubernetesSideCauseMatched(in) {
 				return nil
 			}
-			hints := scanLogTail(in.LogTail)
-			sigterm := sigtermTermination(in)
-
-			conf := ConfidenceMedium
-			switch {
-			case t.ExitCode == 126 || t.ExitCode == 127:
-				conf = ConfidenceHigh
-			case t.ExitCode == 139 || t.Signal == 11:
-				conf = ConfidenceHigh
-			case sigterm:
-				conf = ConfidenceLow
-			case len(hints) > 0:
-				conf = ConfidenceMedium
-			case in.LogsUnavailable || len(in.LogTail) == 0:
-				conf = ConfidenceLow
-			}
-
-			d := newDiagnosis(in, CauseAppExitNonzero, conf)
-
-			var expl string
-			if effectiveKind(in) == KindInit {
-				expl = fmt.Sprintf(
-					"Init container %q exited with code %d. No Kubernetes-side cause (OOM kill, eviction, image pull, "+
-						"config or volume error) applies, so the init process itself failed - and the pod cannot start "+
-						"its app containers until this init container exits 0.",
-					in.Container, t.ExitCode)
-			} else {
-				expl = fmt.Sprintf(
-					"%s exited with code %d on its own. No Kubernetes-side cause (OOM kill, probe failure, eviction, "+
-						"image pull, config or volume error) applies, so this is the application's own failure.",
-					capitalizeFirst(containerRef(in)), t.ExitCode)
-			}
-			switch {
-			case t.ExitCode == 127:
-				expl += " Exit code 127 means the container's command was not found: check the entrypoint path, " +
-					"a missing binary, or a distroless/scratch image without a shell."
-			case t.ExitCode == 126:
-				expl += " Exit code 126 means the command was found but could not be executed: a missing execute bit, " +
-					"a wrong interpreter line, or a CPU-architecture mismatch."
-			case t.ExitCode == 139 || t.Signal == 11:
-				expl += " Exit code 139 is SIGSEGV: the process segfaulted, which usually means a native-code or " +
-					"architecture problem rather than a normal application error."
-			case sigterm:
-				expl += " Exit code 143 is SIGTERM, and the pod has no deletionTimestamp and its owner is not rolling: " +
-					"something inside the pod sent SIGTERM to the process, so this was not a Kubernetes-initiated stop."
-			}
-			if len(hints) > 0 {
-				expl += fmt.Sprintf(" The log tail shows %s.", hints[0].Note)
-			}
-			d.Explanation = expl
-
-			appendEvidence(d, terminationEvidence(t)...)
-			appendEvidence(d, restartEvidence(in)...)
-			if in.Waiting.Present && in.Waiting.Reason != "" {
-				appendEvidence(d, "waiting reason: "+in.Waiting.Reason)
-			}
-			if sigterm {
-				appendEvidence(d, "terminated by SIGTERM from inside the pod - not initiated by Kubernetes deletion")
-				appendEvidence(d, "pod has no deletionTimestamp and its owner is not mid rolling-update")
-			}
-			for _, e := range eventsByReason(in, "BackOff") {
-				appendEvidence(d, describeEvent(e))
-			}
-			switch {
-			case in.LogsUnavailable:
-				appendEvidence(d, "logs were unavailable (collection disabled, rate-limited, or failed): this diagnosis "+
-					"is based on the exit code and events only")
-			case len(in.LogTail) == 0:
-				appendEvidence(d, "log tail was empty: this diagnosis is based on the exit code and events only")
-			default:
-				appendEvidence(d, fmt.Sprintf("inspected %d lines of the previous container's log tail", len(in.LogTail)))
-			}
-			for _, h := range hints {
-				appendEvidence(d, fmt.Sprintf("log hint (%s): %s", h.Label, truncateMessage(h.Line)))
-			}
-			if len(hints) == 0 && !in.LogsUnavailable && len(in.LogTail) > 0 {
-				appendEvidence(d, "last log line: "+truncateMessage(in.LogTail[len(in.LogTail)-1]))
-				appendEvidence(d, "no known crash pattern matched the log tail")
-			}
-
-			appendSteps(d, logsCommand(in, true)+"    # the crashed instance's logs, not the current one")
-			for _, h := range hints {
-				appendSteps(d, h.Steps...)
-			}
-			switch {
-			case t.ExitCode == 127:
-				appendSteps(d, "Verify the image's ENTRYPOINT/CMD and any command:/args: override in the pod spec",
-					"docker run --rm --entrypoint sh "+in.Image+" -c 'ls -l <path>'    # check the binary exists in the image")
-			case t.ExitCode == 126:
-				appendSteps(d, "chmod +x the entrypoint in the Dockerfile, and check the image architecture matches the nodes")
-			case sigterm:
-				appendSteps(d, "Look for an in-container supervisor, sidecar or health script that sends SIGTERM to PID 1")
-			}
-			if in.LogsUnavailable {
-				appendSteps(d, "Enable log collection (RBAC pods/log, or logCollection.enabled=true in the Helm chart) "+
-					"to get log-pattern hints")
-			}
-			appendSteps(d, fmt.Sprintf("crashcause inspect %s %s%s --ai    # AI summary of the application error itself",
-				podRef(in), nsFlag(in), containerFlag(in)))
+			x := appExit{in: in, t: t, sigterm: sigtermTermination(in), hints: scanLogTail(in.LogTail)}
+			d := newDiagnosis(in, CauseAppExitNonzero, x.confidence())
+			d.Explanation = x.explanation()
+			appendEvidence(d, x.evidence()...)
+			appendSteps(d, x.steps()...)
 			return d
 		},
 	}
+}
+
+type appExit struct {
+	in      Inputs
+	t       TerminationState
+	sigterm bool
+	hints   []logHint
+}
+
+func (x appExit) segfault() bool {
+	return x.t.ExitCode == 139 || x.t.Signal == 11
+}
+
+func (x appExit) confidence() Confidence {
+	switch {
+	case x.t.ExitCode == 126 || x.t.ExitCode == 127:
+		return ConfidenceHigh
+	case x.segfault():
+		return ConfidenceHigh
+	case x.sigterm:
+		return ConfidenceLow
+	case len(x.hints) > 0:
+		return ConfidenceMedium
+	case x.in.LogsUnavailable || len(x.in.LogTail) == 0:
+		return ConfidenceLow
+	default:
+		return ConfidenceMedium
+	}
+}
+
+func (x appExit) explanation() string {
+	var expl string
+	if effectiveKind(x.in) == KindInit {
+		expl = fmt.Sprintf(
+			"Init container %q exited with code %d. No Kubernetes-side cause (OOM kill, eviction, image pull, "+
+				"config or volume error) applies, so the init process itself failed - and the pod cannot start "+
+				"its app containers until this init container exits 0.",
+			x.in.Container, x.t.ExitCode)
+	} else {
+		expl = fmt.Sprintf(
+			"%s exited with code %d on its own. No Kubernetes-side cause (OOM kill, probe failure, eviction, "+
+				"image pull, config or volume error) applies, so this is the application's own failure.",
+			capitalizeFirst(containerRef(x.in)), x.t.ExitCode)
+	}
+	expl += x.exitCodeMeaning()
+	if len(x.hints) > 0 {
+		expl += fmt.Sprintf(" The log tail shows %s.", x.hints[0].Note)
+	}
+	return expl
+}
+
+func (x appExit) exitCodeMeaning() string {
+	switch {
+	case x.t.ExitCode == 127:
+		return " Exit code 127 means the container's command was not found: check the entrypoint path, " +
+			"a missing binary, or a distroless/scratch image without a shell."
+	case x.t.ExitCode == 126:
+		return " Exit code 126 means the command was found but could not be executed: a missing execute bit, " +
+			"a wrong interpreter line, or a CPU-architecture mismatch."
+	case x.segfault():
+		return " Exit code 139 is SIGSEGV: the process segfaulted, which usually means a native-code or " +
+			"architecture problem rather than a normal application error."
+	case x.sigterm:
+		return " Exit code 143 is SIGTERM, and the pod has no deletionTimestamp and its owner is not rolling: " +
+			"something inside the pod sent SIGTERM to the process, so this was not a Kubernetes-initiated stop."
+	default:
+		return ""
+	}
+}
+
+func (x appExit) evidence() []string {
+	ev := terminationEvidence(x.t)
+	ev = append(ev, restartEvidence(x.in)...)
+	if x.in.Waiting.Present && x.in.Waiting.Reason != "" {
+		ev = append(ev, "waiting reason: "+x.in.Waiting.Reason)
+	}
+	if x.sigterm {
+		ev = append(ev,
+			"terminated by SIGTERM from inside the pod - not initiated by Kubernetes deletion",
+			"pod has no deletionTimestamp and its owner is not mid rolling-update")
+	}
+	for _, e := range eventsByReason(x.in, "BackOff") {
+		ev = append(ev, describeEvent(e))
+	}
+	return append(ev, x.logEvidence()...)
+}
+
+func (x appExit) logEvidence() []string {
+	var ev []string
+	switch {
+	case x.in.LogsUnavailable:
+		ev = append(ev, "logs were unavailable (collection disabled, rate-limited, or failed): this diagnosis "+
+			"is based on the exit code and events only")
+	case len(x.in.LogTail) == 0:
+		ev = append(ev, "log tail was empty: this diagnosis is based on the exit code and events only")
+	default:
+		ev = append(ev, fmt.Sprintf("inspected %d lines of the previous container's log tail", len(x.in.LogTail)))
+	}
+	for _, h := range x.hints {
+		ev = append(ev, fmt.Sprintf("log hint (%s): %s", h.Label, truncateMessage(h.Line)))
+	}
+	if len(x.hints) == 0 && !x.in.LogsUnavailable && len(x.in.LogTail) > 0 {
+		ev = append(ev,
+			"last log line: "+truncateMessage(x.in.LogTail[len(x.in.LogTail)-1]),
+			"no known crash pattern matched the log tail")
+	}
+	return ev
+}
+
+func (x appExit) steps() []string {
+	steps := []string{logsCommand(x.in, true) + "    # the crashed instance's logs, not the current one"}
+	for _, h := range x.hints {
+		steps = append(steps, h.Steps...)
+	}
+	switch {
+	case x.t.ExitCode == 127:
+		steps = append(steps, "Verify the image's ENTRYPOINT/CMD and any command:/args: override in the pod spec",
+			"docker run --rm --entrypoint sh "+x.in.Image+" -c 'ls -l <path>'    # check the binary exists in the image")
+	case x.t.ExitCode == 126:
+		steps = append(steps, "chmod +x the entrypoint in the Dockerfile, and check the image architecture matches the nodes")
+	case x.sigterm:
+		steps = append(steps, "Look for an in-container supervisor, sidecar or health script that sends SIGTERM to PID 1")
+	}
+	if x.in.LogsUnavailable {
+		steps = append(steps, "Enable log collection (RBAC pods/log, or logCollection.enabled=true in the Helm chart) "+
+			"to get log-pattern hints")
+	}
+	return append(steps, fmt.Sprintf("crashcause inspect %s %s%s --ai    # AI summary of the application error itself",
+		podRef(x.in), nsFlag(x.in), containerFlag(x.in)))
 }
 
 // ---------------------------------------------------------------------------
@@ -1354,17 +1397,8 @@ func unknownRule() Rule {
 		Cause:     CauseUnknown,
 		AppliesTo: allKinds(),
 		Match: func(in Inputs) *Diagnosis {
-			if !somethingIsWrong(in) {
+			if !somethingIsWrong(in) || specificRuleMatches(in) {
 				return nil
-			}
-			kind := effectiveKind(in)
-			for _, r := range specificRules() {
-				if !r.appliesToKind(kind) {
-					continue
-				}
-				if r.Match(in) != nil {
-					return nil
-				}
 			}
 			d := newDiagnosis(in, CauseUnknown, ConfidenceLow)
 			d.Explanation = fmt.Sprintf(
@@ -1373,39 +1407,8 @@ func unknownRule() Rule {
 				containerRef(in))
 			appendEvidence(d, terminationEvidence(effectiveTermination(in))...)
 			appendEvidence(d, restartEvidence(in)...)
-			if in.Waiting.Present {
-				appendEvidence(d, "waiting reason: "+in.Waiting.Reason)
-				if m := truncateMessage(in.Waiting.Message); m != "" {
-					appendEvidence(d, "waiting message: "+m)
-				}
-			}
-			if in.PodPhase != "" {
-				appendEvidence(d, "pod phase: "+in.PodPhase)
-			}
-			if in.PodReason != "" {
-				appendEvidence(d, "pod status reason: "+in.PodReason)
-			}
-			if m := truncateMessage(in.PodMessage); m != "" {
-				appendEvidence(d, "pod status message: "+m)
-			}
-			if in.ActiveDeadlineExceeded {
-				appendEvidence(d, "pod activeDeadlineSeconds exceeded")
-			}
-			if in.Running.Present {
-				appendEvidence(d, "container is currently running (for "+formatDuration(in.RunningDuration)+")")
-			}
-			for _, e := range in.Events {
-				if strings.EqualFold(e.Type, "Warning") {
-					appendEvidence(d, describeEvent(e))
-				}
-			}
-			appendEvidence(d, nodePressureEvidence(in)...)
-			for _, h := range scanLogTail(in.LogTail) {
-				appendEvidence(d, fmt.Sprintf("log hint (%s): %s", h.Label, truncateMessage(h.Line)))
-			}
-			if in.LogsUnavailable {
-				appendEvidence(d, "logs were unavailable (collection disabled, rate-limited, or failed)")
-			}
+			appendEvidence(d, unknownStateEvidence(in)...)
+			appendEvidence(d, unknownSignalEvidence(in)...)
 			appendSteps(d,
 				describeCommand(in),
 				logsCommand(in, true),
@@ -1416,4 +1419,57 @@ func unknownRule() Rule {
 			return d
 		},
 	}
+}
+
+func specificRuleMatches(in Inputs) bool {
+	kind := effectiveKind(in)
+	for _, r := range specificRules() {
+		if r.appliesToKind(kind) && r.Match(in) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func unknownStateEvidence(in Inputs) []string {
+	var ev []string
+	if in.Waiting.Present {
+		ev = append(ev, "waiting reason: "+in.Waiting.Reason)
+		if m := truncateMessage(in.Waiting.Message); m != "" {
+			ev = append(ev, "waiting message: "+m)
+		}
+	}
+	if in.PodPhase != "" {
+		ev = append(ev, "pod phase: "+in.PodPhase)
+	}
+	if in.PodReason != "" {
+		ev = append(ev, "pod status reason: "+in.PodReason)
+	}
+	if m := truncateMessage(in.PodMessage); m != "" {
+		ev = append(ev, "pod status message: "+m)
+	}
+	if in.ActiveDeadlineExceeded {
+		ev = append(ev, "pod activeDeadlineSeconds exceeded")
+	}
+	if in.Running.Present {
+		ev = append(ev, "container is currently running (for "+formatDuration(in.RunningDuration)+")")
+	}
+	return ev
+}
+
+func unknownSignalEvidence(in Inputs) []string {
+	var ev []string
+	for _, e := range in.Events {
+		if strings.EqualFold(e.Type, "Warning") {
+			ev = append(ev, describeEvent(e))
+		}
+	}
+	ev = append(ev, nodePressureEvidence(in)...)
+	for _, h := range scanLogTail(in.LogTail) {
+		ev = append(ev, fmt.Sprintf("log hint (%s): %s", h.Label, truncateMessage(h.Line)))
+	}
+	if in.LogsUnavailable {
+		ev = append(ev, "logs were unavailable (collection disabled, rate-limited, or failed)")
+	}
+	return ev
 }
