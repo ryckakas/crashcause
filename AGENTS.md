@@ -34,7 +34,7 @@ make lint           # golangci-lint run                (requires golangci-lint v
 make complexity     # go tool bonsai-lint .            (pinned in go.mod, nothing to install)
 make shellcheck     # shellcheck -x on every tracked *.sh  (requires shellcheck)
 make zizmor         # audit .github/ workflows + dependabot.yml (requires zizmor)
-make check          # what CI gates on: lint, complexity, shellcheck, zizmor, race, go vet, govulncheck
+make check          # what CI runs: lint, complexity, shellcheck, zizmor, race, go vet, govulncheck
 make helm-lint       # helm lint + template, asserts pods/log RBAC is present/absent correctly
 make e2e            # kind-based end-to-end run (requires kind, kubectl, jq); see hack/e2e.sh
 ```
@@ -47,8 +47,9 @@ go test -run TestClassify_OOMKilled ./internal/engine/...
 go test -race -run TestName ./internal/collect/...
 ```
 
-`make check` is what CI actually gates on for the `lint`/`test`/`build`/`govulncheck`/`shellcheck`/
-`zizmor`/`helm` jobs (see `.github/workflows/ci.yml`); `e2e-kind` in CI is best-effort/non-gating.
+`make check` mirrors what CI runs (see `.github/workflows/ci.yml`); CI gates on the
+`lint`/`test`/`build`/`shellcheck`/`zizmor`/`helm` jobs, while `govulncheck` (findings posted as
+a PR comment) and `e2e-kind` are non-gating.
 Run `make check` before considering a change done. Every `uses:` in `.github/workflows/` is pinned
 to a full commit SHA with a `# vX.Y.Z` comment (Dependabot updates both); zizmor fails CI on a
 tag or branch ref. golangci-lint config (`.golangci.yml`) enables `exhaustive`
