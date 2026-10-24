@@ -145,13 +145,13 @@ jobs:
         run: govulncheck ./... > govulncheck.txt
 
       # One sticky comment per PR, found by its marker and edited in place, so
-      # re-runs don't pile up comments. Fork and Dependabot PRs get a read-only
-      # token, so they are skipped rather than failing on the write.
+      # re-runs don't pile up comments. Fork PRs always get a read-only token,
+      # so they are skipped rather than failing on the write. Dependabot PRs
+      # honour the job's `permissions:`, so they get the comment too.
       - name: Comment findings on PR
         if: >-
           github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.actor != 'dependabot[bot]'
+          github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
