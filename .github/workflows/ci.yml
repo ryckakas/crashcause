@@ -140,9 +140,12 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Run govulncheck
+        run: govulncheck -format json ./... > govulncheck.json
+
+      - name: Summarize findings
         id: scan
         continue-on-error: true
-        run: govulncheck ./... > govulncheck.txt
+        run: ./hack/govulncheck-report.sh govulncheck.json | tee govulncheck.md >> "$GITHUB_STEP_SUMMARY"
 
       # One sticky comment per PR, found by its marker and edited in place, so
       # re-runs don't pile up comments. Fork PRs always get a read-only token,
@@ -156,19 +159,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OUTCOME: ${{ steps.scan.outcome }}
         run: |
           marker='<!-- govulncheck-findings -->'
           existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
             --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
 
-          if [ "$OUTCOME" = success ]; then
-            [ -z "$existing" ] && exit 0
-            body=$(printf '%s\n### govulncheck: no vulnerabilities found (%s)\n' "$marker" "${HEAD_SHA::7}")
-          else
-            body=$(printf '%s\n### govulncheck findings (%s)\n\n```\n%s\n```\n' \
-              "$marker" "${HEAD_SHA::7}" "$(head -c 60000 govulncheck.txt 2>/dev/null)")
+          if [ "$OUTCOME" = success ] && [ -z "$existing" ]; then
+            exit 0
           fi
+          body=$(printf '%s\n%s\n\n<sub>%s · [workflow run](%s)</sub>\n' \
+            "$marker" "$(cat govulncheck.md)" "${HEAD_SHA::7}" "$RUN_URL")
 
           if [ -n "$existing" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body" > /dev/null
@@ -179,7 +181,7 @@ jobs:
       - name: Report findings
         if: steps.scan.outcome == 'failure'
         run: |
-          cat govulncheck.txt 2>/dev/null
+          cat govulncheck.md
           exit 1
 
   # --- shellcheck: required, genuinely gating -------------------------------
