@@ -1,5 +1,6 @@
-# Weekly dependency updates, per the project spec (§8a): one tool, weekly
-# cadence, covering both the Go module graph and the pinned GitHub Actions.
+# Weekly dependency updates, per the project spec (§8a), covering both the Go
+# module graph and the pinned GitHub Actions. The go.mod `toolchain` line is
+# the one exception: Dependabot cannot bump it, so renovate.json does.
 version: 2
 updates:
   - package-ecosystem: gomod

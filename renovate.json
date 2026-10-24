@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": ["gomod"],
+  "schedule": ["* 0-5 * * 1"],
+  "labels": ["dependencies", "go"],
+  "separateMinorPatch": true,
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "vulnerabilityAlerts": {
+    "enabled": false
+  },
+  "packageRules": [
+    {
+      "description": "Dependabot owns Go module updates. Renovate only bumps the toolchain directive, which Dependabot cannot (dependabot/dependabot-core#13520).",
+      "matchManagers": ["gomod"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["toolchain"],
+      "enabled": true
+    }
+  ]
+}

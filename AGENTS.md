@@ -21,6 +21,8 @@ and Prometheus metric labels): never rename, renumber, or repurpose one; see the
 Build requires Go 1.26 (`toolchain go1.26.8` pinned in `go.mod`; any Go ≥ 1.21 auto-downloads it).
 CI, release builds, and govulncheck all run that pinned toolchain, so a govulncheck failure on a
 standard-library advisory is fixed by bumping the `toolchain` line to the patched release.
+Renovate (`renovate.json`) proposes those bumps weekly and touches nothing else; Dependabot owns
+every other dependency update.
 The Makefile targets assume a Linux/bash-style shell (this is what CI runs); on Windows use Git
 Bash or WSL for `make`, or run the underlying `go`/`golangci-lint` commands directly.
 
