@@ -115,10 +115,16 @@ jobs:
           mkdir -p /tmp/crashcause-build
           go build -o "/tmp/crashcause-build/crashcause-${GOOS}-${GOARCH}" ./cmd/crashcause
 
-  # --- govulncheck: required, genuinely gating ------------------------------
+  # --- govulncheck: informational only, never blocks the pipeline -----------
+  # Findings often land in dependencies before an upstream fix exists, so a
+  # red X here is a prompt to bump deps, not a merge blocker.
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -134,7 +140,47 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Run govulncheck
-        run: govulncheck ./...
+        id: scan
+        continue-on-error: true
+        run: govulncheck ./... > govulncheck.txt
+
+      # One sticky comment per PR, found by its marker and edited in place, so
+      # re-runs don't pile up comments. Fork and Dependabot PRs get a read-only
+      # token, so they are skipped rather than failing on the write.
+      - name: Comment findings on PR
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          marker='<!-- govulncheck-findings -->'
+          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
+
+          if [ "$OUTCOME" = success ]; then
+            [ -z "$existing" ] && exit 0
+            body=$(printf '%s\n### govulncheck: no vulnerabilities found (%s)\n' "$marker" "${HEAD_SHA::7}")
+          else
+            body=$(printf '%s\n### govulncheck findings (%s)\n\n```\n%s\n```\n' \
+              "$marker" "${HEAD_SHA::7}" "$(head -c 60000 govulncheck.txt 2>/dev/null)")
+          fi
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null
+          fi
+
+      - name: Report findings
+        if: steps.scan.outcome == 'failure'
+        run: |
+          cat govulncheck.txt 2>/dev/null
+          exit 1
 
   # --- shellcheck: required, genuinely gating -------------------------------
   # Pinned: the runner's preinstalled shellcheck changes with the image.
