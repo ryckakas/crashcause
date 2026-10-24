@@ -391,7 +391,7 @@ appear, and covers cleanup.
 
 ## Development
 
-Building needs **Go 1.26**, pinned as `toolchain go1.26.8` in `go.mod`; any Go 1.21 or newer
+Building needs **Go 1.26**, pinned as `toolchain go1.26.10` in `go.mod`; any Go 1.21 or newer
 downloads it automatically. The full check loop also needs **golangci-lint v2**, **shellcheck**,
 **zizmor**, **helm** and **kind**.
 
